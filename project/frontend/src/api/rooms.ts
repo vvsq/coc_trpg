@@ -180,6 +180,21 @@ export async function loadSave(
 
 // ==================== 4.3+：检定下放 ====================
 
+/** KP 手动发起检定下放（collab/manual 模式的「要求玩家投骰」；auto 由 AI 发起）。
+ * 服务端按目标角色卡查技能值（D5），落 check_request 消息并 chat_new 广播 */
+export async function createCheckRequest(
+  roomId: string,
+  body: {
+    kp_name: string
+    target: string
+    skill_name: string
+    difficulty: 'standard' | 'hard' | 'extreme'
+    reason: string
+  },
+): Promise<{ status: string; request_id: string; target: string }> {
+  return client.post(`/rooms/${roomId}/check-requests`, body)
+}
+
 /** 被点名的玩家投掷检定：服务端按请求里存好的技能值判定（D5，玩家无自掷空间）。
  * 结算结果同时落 type=dice 行 + roll_result 广播；auto 模式下唤醒 AI 继续 */
 export async function rollCheckRequest(

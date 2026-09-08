@@ -14,6 +14,7 @@ import { computed, reactive, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  createCheckRequest,
   getRoom,
   listSaves,
   loadSave,
@@ -33,7 +34,7 @@ import SkillCheckPanel from '@/components/SkillCheckPanel.vue'
 import AiSuggestionPanel from '@/components/AiSuggestionPanel.vue'
 import KpStylePanel from '@/components/KpStylePanel.vue'
 import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
-import { eraLabel, type Investigator } from '@/types/investigator'
+import { eraLabel, skillValue, type Investigator, type Skill } from '@/types/investigator'
 import type { WsMember } from '@/types/ws'
 
 const route = useRoute()
@@ -248,6 +249,57 @@ async function submitStatus(): Promise<void> {
     // 拦截器统一提示
   } finally {
     statusSubmitting.value = false
+  }
+}
+
+// ---------- 检定下放（4.4+：KP 手动「要求玩家投骰」，collab/manual 模式可用） ----------
+const crForm = reactive({
+  target: '',
+  skill: '',
+  difficulty: 'standard' as 'standard' | 'hard' | 'extreme',
+  reason: '',
+})
+const crSubmitting = ref(false)
+
+/** 目标玩家的卡面技能选项（下拉数据源），label 带当前值 */
+const crSkillOptions = computed<{ label: string; name: string }[]>(() => {
+  const card = crForm.target ? cardMap.value[crForm.target] : null
+  if (!card) return []
+  return card.skills.map((s: Skill) => ({
+    label: `${s.name}${s.detail ? `（${s.detail}）` : ''} ${skillValue(s)}`,
+    name: s.name,
+  }))
+})
+
+async function submitCheckRequest(): Promise<void> {
+  if (!crForm.target) {
+    ElMessage.warning('先选择被点名投骰的成员')
+    return
+  }
+  if (!crForm.skill.trim()) {
+    ElMessage.warning('先选择或输入技能名')
+    return
+  }
+  if (!crForm.reason.trim()) {
+    ElMessage.warning('检定缘由必填（会展示给玩家）')
+    return
+  }
+  crSubmitting.value = true
+  try {
+    await createCheckRequest(room.roomId, {
+      kp_name: room.playerName,
+      target: crForm.target,
+      skill_name: crForm.skill.trim(),
+      difficulty: crForm.difficulty,
+      reason: crForm.reason.trim(),
+    })
+    ElMessage.success(`已要求 ${crForm.target} 投掷，等 TA 在剧情流点「投掷」`)
+    crForm.skill = ''
+    crForm.reason = ''
+  } catch {
+    // 拦截器统一提示（技能不在其卡上 / 目标未绑卡等）
+  } finally {
+    crSubmitting.value = false
   }
 }
 
@@ -516,6 +568,58 @@ onUnmounted(() => {
         <div class="panel-card">
           <h3 class="panel-title">技能检定</h3>
           <SkillCheckPanel :default-secret="true" />
+        </div>
+
+        <!-- 检定下放（4.4+）：KP 定技能/难度/后果，被点名玩家本人在剧情流点「投掷」。
+             此前只有 auto 模式 AI 能发起，collab/manual 没有 KP 入口（实测反馈修复） -->
+        <div class="panel-card">
+          <h3 class="panel-title">检定下放</h3>
+          <el-select
+            v-model="crForm.target"
+            class="tb-row"
+            placeholder="要求谁投骰（须已绑卡）"
+            size="small"
+            filterable
+          >
+            <el-option
+              v-for="m in statusTargets"
+              :key="m.player_name"
+              :label="m.player_name + (cardMap[m.player_name]?.occupation ? ` · ${cardMap[m.player_name]?.occupation}` : '')"
+              :value="m.player_name"
+            />
+          </el-select>
+          <el-select
+            v-model="crForm.skill"
+            class="tb-row"
+            placeholder="选择或输入技能名（按其卡查值）"
+            size="small"
+            filterable
+            allow-create
+            default-first-option
+          >
+            <el-option v-for="o in crSkillOptions" :key="o.name" :label="o.label" :value="o.name" />
+          </el-select>
+          <el-select v-model="crForm.difficulty" class="tb-row" size="small">
+            <el-option label="常规" value="standard" />
+            <el-option label="困难" value="hard" />
+            <el-option label="极难" value="extreme" />
+          </el-select>
+          <el-input
+            v-model="crForm.reason"
+            class="tb-row"
+            placeholder="检定缘由（必填，如：撬开书房的门锁）"
+            maxlength="200"
+            size="small"
+          />
+          <el-button
+            type="warning"
+            class="tb-btn"
+            size="small"
+            :loading="crSubmitting"
+            @click="submitCheckRequest"
+          >
+            要求投掷
+          </el-button>
         </div>
 
         <!-- AI 建议（4.1 协同建议模式：玩家行动 → LLM 候选建议，仅 KP 可见） -->

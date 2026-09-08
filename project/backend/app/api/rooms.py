@@ -76,6 +76,19 @@ def join_room(room_id: str, payload: JoinRequest, session: Session = Depends(get
     if payload.card_id and not session.get(Card, payload.card_id):
         raise HTTPException(status_code=404, detail='角色卡不存在')
     if payload.player_name == room.kp_name:
+        # KP 重进幂等；但显式 leave（关网页 beacon）会删花名册行——行不在则补建，
+        # 否则 KP 刷新后成员列表缺自己（4.4+ 修复）
+        kp_row = session.exec(
+            select(RoomMember).where(
+                RoomMember.room_id == room_id,
+                RoomMember.player_name == payload.player_name,
+            )
+        ).first()
+        if not kp_row:
+            session.add(RoomMember(
+                room_id=room_id, player_name=payload.player_name, role='kp',
+            ))
+            session.commit()
         return _list_members(session, room_id)
     dup = session.exec(
         select(RoomMember).where(
@@ -94,6 +107,49 @@ def join_room(room_id: str, payload: JoinRequest, session: Session = Depends(get
     ))
     session.commit()
     return _list_members(session, room_id)
+
+
+class LeaveRequest(BaseModel):
+    """离开房间请求体（4.4+：关网页时 sendBeacon 发出）。"""
+
+    player_name: str = Field(min_length=1, max_length=50)
+
+
+@router.post('/rooms/{room_id}/leave')
+async def leave_room(
+    room_id: str, payload: LeaveRequest, session: Session = Depends(get_session),
+):
+    """显式离开房间（关网页 beacon / 退出按钮兜底）：删花名册行 + 系统消息 + 广播。
+
+    4.4+ 语义：WS 断开一律按掉线处理，不再广播离开；只有显式 leave 才算退出。
+    sendBeacon 在页面卸载时发不出 WS 帧，故走 REST。幂等：人不在花名册时静默返回。
+    """
+    room = session.get(Room, room_id)
+    if not room:
+        return {'ok': True}  # 房间已没了（解散后卸载），beacon 场景静默成功
+    row = session.exec(
+        select(RoomMember).where(
+            RoomMember.room_id == room_id,
+            RoomMember.player_name == payload.player_name,
+        )
+    ).first()
+    if row is None:
+        return {'ok': True}
+    session.delete(row)
+    session.add(Message(
+        room_id=room_id, channel='system', type='sys',
+        sender='system', content=f'{payload.player_name} 离开了房间',
+    ))
+    session.commit()
+    members = _list_members(session, room_id)
+    await manager.broadcast(room_id, build_envelope(
+        'chat_new', room_id, 'system', 'system',
+        {'text': f'{payload.player_name} 离开了房间'},
+    ))
+    await manager.broadcast(room_id, build_envelope(
+        'member_changed', room_id, 'system', 'system', {'members': members},
+    ))
+    return {'ok': True}
 
 
 @router.get('/rooms/{room_id}')
@@ -162,24 +218,17 @@ async def dissolve_room(room_id: str, kp_name: str, session: Session = Depends(g
 def build_room_state(session: Session, room: Room) -> dict:
     """room_state 全量快照组装器：REST /state 与 load 的 WS 广播共用同一结构。
 
-    members 用"在线 ∩ 花名册"语义（与 member_changed 广播一致，避免读档后
-    列表里冒出早已离房的幽灵成员）；hp_sanity 按持久花名册全量组装——离线
-    成员的 HP/SAN 也给全，重连补齐不缺行。HP/SAN 以上限 card_data 为准
-    （投影列只作索引），上限取 derived 的 HP/SAN。
+    members 用持久花名册全量语义（4.4+ 与 member_changed 广播一致：掉线成员
+    仍在列表里，只有显式 leave 才删行；读档时花名册由快照重建，无幽灵行）；
+    hp_sanity 按持久花名册全量组装——离线成员的 HP/SAN 也给全，重连补齐不缺行。
+    HP/SAN 以上限 card_data 为准（投影列只作索引），上限取 derived 的 HP/SAN。
     """
     roster = session.exec(select(RoomMember).where(RoomMember.room_id == room.id)).all()
-    roster_by_name = {m.player_name: m for m in roster}
 
-    online: list[dict] = []
-    seen: set[str] = set()
-    for ws in manager.active.get(room.id, []):
-        name = manager.identities.get(id(ws))
-        if name and name in roster_by_name and name not in seen:
-            seen.add(name)
-            m = roster_by_name[name]
-            online.append(
-                {'player_name': m.player_name, 'role': m.role, 'card_id': m.card_id}
-            )
+    members = [
+        {'player_name': m.player_name, 'role': m.role, 'card_id': m.card_id}
+        for m in roster
+    ]
 
     hp_sanity: dict[str, dict] = {}
     for m in roster:
@@ -198,7 +247,7 @@ def build_room_state(session: Session, room: Room) -> dict:
         }
 
     return {
-        'members': online,
+        'members': members,
         'scene': {'scene_title': room.scene_title, 'scene_desc': room.scene_desc},
         'hp_sanity': hp_sanity,
         'style': style_echo(session, room),

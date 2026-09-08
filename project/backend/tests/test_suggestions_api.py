@@ -384,7 +384,7 @@ def test_llm_status_and_test_endpoints(client, monkeypatch):
     monkeypatch.setattr('app.api.suggestions.get_settings', lambda: type('S', (), {
         'enabled': True, 'provider': 'dashscope', 'base_url': 'https://x/v1',
         'model': 'qwen-flash', 'api_key_masked': 'sk-ws***DEIg',
-        'timeout': 30.0, 'retries': 2, 'mock_mode': False,
+        'timeout': 30.0, 'retries': 2, 'mock_mode': False, 'disable_thinking': False,
         'light_base_url': '', 'light_model': '', 'light_api_key_masked': '',
     })())
     monkeypatch.setattr('app.api.suggestions.get_usage',

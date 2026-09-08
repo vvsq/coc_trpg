@@ -9,7 +9,7 @@
  *   - auto：剧情推进由后端 AutoKeeper 整轮主持，四段叙事经 chat_new 双通道到达
  *   - 采纳/编辑：直接走 room.sendChat('narrative', text)（现有 chat_send 通道）
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { generateSuggestions, setAgentMode } from '@/api/agent'
 import { getRoom } from '@/api/rooms'
@@ -41,6 +41,36 @@ const DIFF_LABELS: Record<string, string> = {
 const suggestions = computed<SuggestionItem[]>(() => room.lastSuggestions?.suggestions ?? [])
 const degraded = computed(() => room.lastSuggestions?.status === 'degraded')
 const degradedError = computed(() => room.lastSuggestions?.error ?? '未知原因')
+
+// ---------- 思考等待时长（4.4+）：非流式下模型思考/生成期间前端只知"在等"，
+// 用实时跳动的已等待秒数给出明确反馈（超时配置 ≥600s 后尤其必要） ----------
+const thinkSeconds = ref(0)
+let thinkTimer: number | null = null
+
+function startThinkTimer(): void {
+  stopThinkTimer()
+  thinkSeconds.value = 0
+  thinkTimer = window.setInterval(() => {
+    thinkSeconds.value++
+  }, 1000)
+}
+
+function stopThinkTimer(): void {
+  if (thinkTimer !== null) {
+    clearInterval(thinkTimer)
+    thinkTimer = null
+  }
+}
+
+watch(
+  () => [room.suggestionsPending, room.keeperPending] as const,
+  ([sug, keeper]) => {
+    if (sug || keeper) startThinkTimer()
+    else stopThinkTimer()
+  },
+)
+
+onUnmounted(stopThinkTimer)
 
 /** 面板挂载时拉一次房间详情回显 agent_mode。room.roomId 由 KP 控制台守卫
  * 异步写入（子组件先挂载），照 SkillCheckPanel 的 cardId 先例用 watch 等待 */
@@ -146,7 +176,10 @@ function sendEdit(): void {
     <template v-if="room.agentMode === 'auto'">
       <div v-if="room.keeperPending" class="sug-loading">
         <el-skeleton :rows="2" animated />
-        <p class="sug-loading-text">AI KP 正在主持本轮剧情（掷骰/状态由工具结算）…</p>
+        <p class="sug-loading-text">
+          AI KP 正在主持本轮剧情（掷骰/状态由工具结算）…<template v-if="thinkSeconds > 2">
+            · 已思考 {{ thinkSeconds }}s</template>
+        </p>
       </div>
       <p v-else class="ai-empty">
         AI KP 待命：玩家或你在剧情流的每次推进都会触发整轮主持。四段叙事与行动切口
@@ -170,10 +203,13 @@ function sendEdit(): void {
         {{ degradedError }}
       </el-alert>
 
-      <!-- 生成中：骨架屏（不阻塞聊天与其他面板） -->
+      <!-- 生成中：骨架屏（不阻塞聊天与其他面板），显示已等待秒数 -->
       <div v-if="room.suggestionsPending" class="sug-loading">
         <el-skeleton :rows="2" animated />
-        <p class="sug-loading-text">AI 正在根据最新剧情生成建议…</p>
+        <p class="sug-loading-text">
+          AI 正在根据最新剧情生成建议…<template v-if="thinkSeconds > 2">
+            · 已思考 {{ thinkSeconds }}s</template>
+        </p>
       </div>
 
       <!-- 候选建议列表 -->

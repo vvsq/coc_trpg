@@ -518,30 +518,40 @@ async def _tool_roll_check(session: Session, room_id: str, args: dict) -> dict:
             'level': level, 'level_label': LEVEL_LABELS[level], 'success': level not in ('fail', 'fumble')}
 
 
-async def _tool_request_check(session: Session, room_id: str, args: dict) -> dict:
-    """检定下放（正统玩法）：AI 定技能/难度/后果，玩家本人投掷（实测反馈方案落地）。
+async def create_check_request(
+    session: Session,
+    room_id: str,
+    target: str,
+    skill_name: str,
+    difficulty: str = 'standard',
+    reason: str = '',
+    sender: str = AI_KEEPER_NAME,
+    ai: bool = True,
+) -> dict:
+    """发起一次检定下放（4.3 AI request_check 工具与 4.4+ KP 手动下放共用实现）。
 
     服务端按目标角色卡查技能值（D5），玩家只点「投掷」按钮，无自掷刷优势空间。
-    投掷端点 POST /rooms/{id}/check-requests/{request_id}/roll 完成结算并唤醒 AI。
+    落 type=check_request 消息 + chat_new 广播；投掷结算在
+    POST /rooms/{id}/check-requests/{request_id}/roll（模式无关，可复用）。
+    校验失败抛 ValueError（AI 路径 error 回喂 / REST 路径 400）。
     """
-    target = str(args.get('target') or '').strip()
-    skill_name = str(args.get('skill_name') or '').strip()
-    difficulty = str(args.get('difficulty') or 'standard')
-    reason = str(args.get('reason') or '').strip()
-    if not target or not skill_name or not reason:
-        raise ValueError('request_check 需要 target / skill_name / reason')
+    target = target.strip()
+    skill_name = skill_name.strip()
+    reason = (reason or '').strip()
+    if not target or not skill_name:
+        raise ValueError('检定下放需要 target 与 skill_name')
     if difficulty not in ('standard', 'hard', 'extreme'):
         raise ValueError(f'难度必须是 standard/hard/extreme，收到 {difficulty!r}')
     _, _, data = _load_member_card(session, room_id, target)
     value = _skill_value(data, skill_name)
     if value is None:
         raise ValueError(
-            f'「{target}」的技能表里没有「{skill_name}」。请先调用 get_card 查询其技能表'
+            f'「{target}」的技能表里没有「{skill_name}」。请先查询其技能表'
         )
 
     request_id = uuid.uuid4().hex[:12]
     payload = {
-        'role': 'kp', 'ai': True, 'check_request': True,
+        'role': 'kp', 'ai': ai, 'check_request': True,
         'request_id': request_id, 'target': target,
         'skill_name': skill_name, 'difficulty': difficulty,
         'value': value, 'reason': reason[:200], 'fulfilled': False,
@@ -549,18 +559,36 @@ async def _tool_request_check(session: Session, room_id: str, args: dict) -> dic
     content = f'请 {target} 进行 {skill_name}（{DIFFICULTY_LABELS[difficulty]}）检定：{reason[:150]}'
     session.add(Message(
         room_id=room_id, channel='narrative', type='check_request',
-        sender=AI_KEEPER_NAME, content=content, secret=False, payload=payload,
+        sender=sender, content=content, secret=False, payload=payload,
     ))
     session.commit()
     await manager.broadcast(room_id, build_envelope(
-        'chat_new', room_id, AI_KEEPER_NAME, 'narrative', payload,
+        'chat_new', room_id, sender, 'narrative', payload,
     ))
     return {
         'status': 'requested', 'request_id': request_id, 'target': target,
         'skill': skill_name, 'value': value, 'difficulty': difficulty,
-        'note': '已向玩家发起投掷请求。本轮叙事在检定点收束即可（铺垫正文已写），'
-                '玩家投掷后系统会用骰子结果唤醒你继续主持。',
     }
+
+
+async def _tool_request_check(session: Session, room_id: str, args: dict) -> dict:
+    """检定下放（正统玩法）：AI 定技能/难度/后果，玩家本人投掷（实测反馈方案落地）。
+
+    主体逻辑抽到 create_check_request（与 KP 手动下放共用）；玩家投掷后唤醒 AI。
+    """
+    result = await create_check_request(
+        session, room_id,
+        target=str(args.get('target') or ''),
+        skill_name=str(args.get('skill_name') or ''),
+        difficulty=str(args.get('difficulty') or 'standard'),
+        reason=str(args.get('reason') or ''),
+        sender=AI_KEEPER_NAME, ai=True,
+    )
+    result['note'] = (
+        '已向玩家发起投掷请求。本轮叙事在检定点收束即可（铺垫正文已写），'
+        '玩家投掷后系统会用骰子结果唤醒你继续主持。'
+    )
+    return result
 
 
 async def _tool_roll_dice(session: Session, room_id: str, args: dict) -> dict:

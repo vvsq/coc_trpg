@@ -70,6 +70,16 @@ class LoadRequest(BaseModel):
     kp_name: str = Field(min_length=1, max_length=50)
 
 
+class CheckRequestCreate(BaseModel):
+    """KP 手动发起检定下放请求体（collab/manual 模式下的「要求玩家投骰」）。"""
+
+    kp_name: str = Field(min_length=1, max_length=50)
+    target: str = Field(min_length=1, max_length=50)
+    skill_name: str = Field(min_length=1, max_length=50)
+    difficulty: str = Field(default='standard', pattern='^(standard|hard|extreme)$')
+    reason: str = Field(min_length=1, max_length=200)
+
+
 @router.post('/rooms/{room_id}/status')
 async def update_status(
     room_id: str,
@@ -111,6 +121,40 @@ async def update_scene(
         session, room_id,
         scene_title=body.scene_title, scene_desc=body.scene_desc, operator=body.kp_name,
     )
+
+
+# ==================== KP 手动检定下放（collab/manual 模式的「要求玩家投骰」） ====================
+
+@router.post('/rooms/{room_id}/check-requests')
+async def create_room_check_request(
+    room_id: str,
+    body: CheckRequestCreate,
+    session: Session = Depends(get_session),
+):
+    """KP 手动发起检定下放：定目标/技能/难度/后果，被点名玩家本人投掷。
+
+    与 AI request_check 工具共用 tools.create_check_request（落 type=check_request
+    消息 + chat_new 广播，sender 为 KP 名字）；投掷结算走模式无关的
+    POST /rooms/{id}/check-requests/{request_id}/roll。此前该能力只在 auto 模式
+    由 AI 触发，协同模式 KP 没有入口（用户实测反馈修复）。
+    """
+    # 局部导入防环：tools 依赖 api.dice 标签常量
+    from app.agent.tools import create_check_request
+
+    room = session.get(Room, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail='房间不存在')
+    if body.kp_name != room.kp_name:
+        raise HTTPException(status_code=403, detail='只有 KP 能发起检定下放')
+    try:
+        return await create_check_request(
+            session, room_id,
+            target=body.target, skill_name=body.skill_name,
+            difficulty=body.difficulty, reason=body.reason,
+            sender=body.kp_name, ai=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ==================== 开团：waiting → playing 状态流转 ====================

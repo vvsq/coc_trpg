@@ -6,11 +6,11 @@
   - ping       心跳，回 pong
 
 服务端 → 客户端：chat_new / member_changed / pong / error（统一走 build_envelope 信封）。
-断开时清理连接并广播离开消息与最新成员列表。
+4.4+：WS 断开一律按「掉线」处理（不广播离开、不改成员列表）；只有显式
+leave 消息（退出按钮）/ REST leave（关网页 beacon）才广播离开并删花名册行。
 
-服务端心跳踢除（3.4）：prune_stale_loop 后台协程定期扫描 last_seen，把超时
-未活跃的连接按正常离开语义摘除——根治 vite 代理抖动时 close 不转发遗留的
-僵尸连接（重复收广播 / 成员列表虚胖）。
+服务端死链清理（3.4 引入，4.4+ 改静默）：prune_stale_loop 后台协程定期扫描
+last_seen，静默摘除超时僵尸连接（vite 代理抖动时 close 不转发的遗留连接）。
 
 注意：
   - WS 事件循环里不走 FastAPI 的 Depends(get_session)（那是请求级依赖），
@@ -40,10 +40,11 @@ CLOSE_ROOM_NOT_FOUND = 4404  # 自定义关闭码：房间不存在
 
 # ---------- 进出房消息去重（实测反馈：后台标签页被节流 → 心跳超时误杀 →
 # 回前台自动重连，产生成对的「离开了/进入了房间」刷屏） ----------
-# 策略：断开时 last_seen 落后超过 _STALE_DISCONNECT 视为「超时掉线」而非主动
-# 退出 → 不落/不广播离开消息，只记录时间；同玩家在 _REJOIN_COOLDOWN 内重连
-# → 静默恢复（不广播进入消息）。主动退出/首次进入的提示不受影响。
-_STALE_DISCONNECT = 45.0    # 秒：断开时心跳落后超过该值 = 掉线
+# 策略（4.4+ 修订）：**WS 断开一律视为掉线，不再推导"主动退出"**——只有
+# 显式 leave 消息（点退出按钮）/ REST leave（关网页 beacon）才广播离开。
+# 切标签页、后台节流、网络抖动都不会再把人判为退出；成员列表改用持久
+# 花名册全量展示（掉线的人仍在列表里，不视为离房）。
+# 同玩家在 _REJOIN_COOLDOWN 内重连 → 静默恢复（不广播进入消息）。
 _REJOIN_COOLDOWN = 300.0    # 秒：静默重连窗口
 _suppressed_leaves: dict[tuple[str, str], float] = {}  # (room_id, player_name) → 断开时刻
 
@@ -55,7 +56,11 @@ def _prune_suppressed(now: float) -> None:
 
 
 def _members_payload(session: Session, room_id: str) -> list[dict]:
-    """持久花名册（字段与 REST join 返回值保持一致）。"""
+    """member_changed 用的成员列表 = 持久花名册（字段与 REST join 返回值一致）。
+
+    4.4+ 起不再按"活跃连接"过滤：掉线/切标签页的成员仍在列表里显示
+    （不视为退出），只有显式 leave（退出按钮 / 关网页）才删花名册行。
+    """
     rows = session.exec(
         select(RoomMember).where(RoomMember.room_id == room_id)
     ).all()
@@ -63,22 +68,6 @@ def _members_payload(session: Session, room_id: str) -> list[dict]:
         {'player_name': m.player_name, 'role': m.role, 'card_id': m.card_id}
         for m in rows
     ]
-
-
-def _online_members(session: Session, room_id: str) -> list[dict]:
-    """member_changed 用的"当前在线"成员列表。
-
-    room_member 是持久花名册（离线不删），直接查库会让离开的人永远挂在
-    列表里；因此以活跃连接为准，role/card_id 从花名册按名补齐。
-    同名多连接（同开两个标签页）按名字去重。
-    """
-    roster = {m['player_name']: m for m in _members_payload(session, room_id)}
-    online: dict[str, dict] = {}
-    for ws in manager.active.get(room_id, []):
-        name = manager.identities.get(id(ws))
-        if name and name in roster:
-            online[name] = roster[name]
-    return list(online.values())
 
 
 def _sys(text: str, room_id: str) -> dict:
@@ -95,16 +84,16 @@ def _persist_sys(session: Session, room_id: str, text: str) -> None:
     ))
 
 
-async def prune_stale_loop(interval: float = 15.0, timeout: float = 75.0) -> None:
-    """服务端心跳踢除（3.4）：每 interval 秒扫描，踢除 timeout 秒未活跃的连接。
+async def prune_stale_loop(interval: float = 15.0, timeout: float = 180.0) -> None:
+    """服务端死链清理（3.4 引入，4.4+ 改为静默）：每 interval 秒扫描，摘除
+    timeout 秒未活跃的连接。
 
-    客户端 15s 一次 ping 会持续 touch；vite 代理抖动等导致 close 不转发时，
-    僵尸连接再无消息进来，超时后按正常离开语义摘除并广播，防止重复收广播
-    与成员列表虚胖。摘除前复查 last_seen：扫描期间刚复活（收到消息）的跳过。
-
-    timeout 取 75s（5 个心跳周期）而非 45s：浏览器对后台标签页有定时器
-    节流（-intensive throttling 下最低 1 次/分钟），60s 一次的 ping 必须
-    放行，否则后台的活跃标签会被误杀反复重连。真正死链 75~90s 内必被清。
+    4.4+ 语义变更：超时连接一律按「掉线」静默摘除——不落库、不广播任何
+    系统消息、不改成员列表（掉线成员保留在花名册里），同时补 ws.close()
+    消灭"假在线"幽灵连接。此前按"心跳超时，已断开"广播离开语义，正是
+    切标签页被判退出的根因之一；真正的离开只由显式 leave 消息表达。
+    timeout 取 180s：后台标签 intensive throttling 下 ping 最低 1 次/分钟，
+    必须宽放行；真死链（关进程/断网）3 分钟内清理，且已不再打扰任何人。
     """
     while True:
         await asyncio.sleep(interval)
@@ -112,19 +101,12 @@ async def prune_stale_loop(interval: float = 15.0, timeout: float = 75.0) -> Non
             now = time.monotonic()
             if now - manager.last_seen.get(id(ws), now) <= timeout:
                 continue  # 扫描间隙收到消息，复活了
-            name = manager.identities.get(id(ws))
             manager.disconnect(room_id, ws)
-            if not name:
-                continue  # 未 join 的裸连接静默摘除
-            with Session(engine) as session:
-                _persist_sys(session, room_id, f'{name} 心跳超时，已断开')
-                session.commit()
-                members = _online_members(session, room_id)
-            await manager.broadcast(room_id, _sys(f'{name} 心跳超时，已断开', room_id))
-            await manager.broadcast(room_id, build_envelope(
-                'member_changed', room_id, 'system', 'system',
-                {'members': members},
-            ))
+            try:
+                await ws.close()  # 补刀：断掉客户端侧的假在线连接（room_ws 的
+                # receive 循环会收到断开，finally 的掉线分支与之幂等）
+            except Exception:  # noqa: BLE001 已死连接，清理目的已达成
+                pass
 
 
 @router.websocket('/ws/{room_id}')
@@ -182,7 +164,7 @@ async def room_ws(websocket: WebSocket, room_id: str):
                 rejoin_key = (room_id, name)
                 silent_rejoin = now - _suppressed_leaves.get(rejoin_key, -1e18) < _REJOIN_COOLDOWN
                 with Session(engine) as session:
-                    members = _online_members(session, room_id)
+                    members = _members_payload(session, room_id)
                     if not silent_rejoin:
                         _persist_sys(session, room_id, f'{name} 进入了房间')
                     session.commit()
@@ -246,6 +228,37 @@ async def room_ws(websocket: WebSocket, room_id: str):
                         auto_keeper.schedule_turn(room_id)
                 continue
 
+            if msg_type == 'leave':
+                # 显式退出（4.4+）：点「退出房间」按钮时客户端先发 leave 再断开。
+                # 这是唯一在 WS 通道上广播"离开了房间"的路径；之后 finally 的
+                # 掉线分支不再产生任何离开语义。
+                if player_name:
+                    with Session(engine) as session:
+                        # 同名多标签页：还有别的连接挂着同名就不删花名册行
+                        others = any(
+                            manager.identities.get(id(w)) == player_name
+                            for w in manager.active.get(room_id, [])
+                            if w is not websocket
+                        )
+                        if not others:
+                            row = session.exec(
+                                select(RoomMember).where(
+                                    RoomMember.room_id == room_id,
+                                    RoomMember.player_name == player_name,
+                                )
+                            ).first()
+                            if row:
+                                session.delete(row)
+                        _persist_sys(session, room_id, f'{player_name} 离开了房间')
+                        session.commit()
+                        members = _members_payload(session, room_id)
+                    await manager.broadcast(room_id, _sys(f'{player_name} 离开了房间', room_id))
+                    await manager.broadcast(room_id, build_envelope(
+                        'member_changed', room_id, 'system', 'system',
+                        {'members': members},
+                    ))
+                continue
+
             # 未知类型：回 error 但不断连（客户端版本先行时前端可自愈）
             await websocket.send_json(build_envelope(
                 'error', room_id, 'system', 'system',
@@ -255,27 +268,11 @@ async def room_ws(websocket: WebSocket, room_id: str):
     except WebSocketDisconnect:
         pass
     finally:
-        # 掉线判定要在 disconnect 清理 last_seen 之前做
-        stale_drop = (
-            time.monotonic() - manager.last_seen.get(id(websocket), time.monotonic())
-        ) > _STALE_DISCONNECT
+        # 4.4+：WS 断开一律按「掉线」处理——不落库、不广播离开、不改成员列表
+        # （切标签页/后台节流/网络抖动都不是退出）。只记录断开时刻供静默重连
+        # 判定；真正的离开只由显式 leave 消息 / REST leave（关网页 beacon）表达。
         manager.disconnect(room_id, websocket)
         if player_name:
             now = time.monotonic()
-            with Session(engine) as session:
-                if stale_drop:
-                    # 超时掉线（后台标签节流/网络抖动）：不落不广播离开消息，记录时间供静默重连判定
-                    _suppressed_leaves[(room_id, player_name)] = now
-                    _prune_suppressed(now)
-                else:
-                    # 主动退出：正常离开语义（离开广播放在 disconnect 之后，本人已不在接收列表）
-                    _suppressed_leaves.pop((room_id, player_name), None)
-                    _persist_sys(session, room_id, f'{player_name} 离开了房间')
-                session.commit()
-                members = _online_members(session, room_id)
-            if not stale_drop:
-                await manager.broadcast(room_id, _sys(f'{player_name} 离开了房间', room_id))
-            await manager.broadcast(room_id, build_envelope(
-                'member_changed', room_id, 'system', 'system',
-                {'members': members},
-            ))
+            _suppressed_leaves[(room_id, player_name)] = now
+            _prune_suppressed(now)

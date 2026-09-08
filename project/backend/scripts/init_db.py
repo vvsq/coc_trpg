@@ -14,12 +14,15 @@ import sys
 
 from pathlib import Path
 
+# 保证能 import app.* ：无论从哪个目录启动，都把 backend/ 根加入 sys.path
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
 from sqlmodel import Session
 
 from app.models import OccupationRow, SkillRow
 
-# 保证能 import app.* ：脚本在 backend/ 下运行时，PYTHONPATH 需包含 backend/
-# （示例命令已带 cd backend && set PYTHONPATH=.）
 from app.db import DB_PATH, engine, init_db
 from app.schemas.occupation import Occupation
 

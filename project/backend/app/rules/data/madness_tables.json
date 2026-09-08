@@ -1,0 +1,891 @@
+{
+ "_source": "docs/coc7-rules.md §6.5/§6.6 + 附录表Ⅸ/表Ⅹ（规则书 p.132-137 核对）",
+ "immediate_symptoms": {
+  "1": {
+   "name": "失忆",
+   "desc": "只记得最后身处的安全地点，没有来到此地的记忆，持续 1D10 轮"
+  },
+  "2": {
+   "name": "假性残疾",
+   "desc": "心理性失明、失聪或躯体缺失感，持续 1D10 轮"
+  },
+  "3": {
+   "name": "暴力倾向",
+   "desc": "六亲不认，无差别攻击敌友，持续 1D10 轮"
+  },
+  "4": {
+   "name": "偏执",
+   "desc": "严重偏执妄想（被监视、被背叛、无人可信），持续 1D10 轮"
+  },
+  "5": {
+   "name": "人际依赖",
+   "desc": "参照背景「重要之人」，把他人误认为那人并据此行动，持续 1D10 轮"
+  },
+  "6": {
+   "name": "昏厥",
+   "desc": "当场昏倒，1D10 轮后苏醒"
+  },
+  "7": {
+   "name": "逃避行为",
+   "desc": "不择手段逃离现场（哪怕开走唯一的车抛下同伴），持续 1D10 轮"
+  },
+  "8": {
+   "name": "竭嘶底里",
+   "desc": "大笑、哭泣、嘶吼等极端情绪，持续 1D10 轮"
+  },
+  "9": {
+   "name": "恐惧",
+   "desc": "骰 D100 查恐惧症状表（或守秘人指定），即使恐惧源不存在也会在 1D10 轮内想象其存在"
+  },
+  "10": {
+   "name": "躁狂",
+   "desc": "骰 D100 查躁狂症状表（或守秘人指定），1D10 轮内沉溺于新的躁狂症"
+  }
+ },
+ "summary_symptoms": {
+  "1": {
+   "name": "失忆",
+   "desc": "在陌生地点回神，忘记自己是谁，记忆缓慢恢复"
+  },
+  "2": {
+   "name": "被窃",
+   "desc": "1D10 小时后清醒，被盗但毫发无伤。携带「宝贵之物」时做幸运检定判定是否遗失；其余贵重品自动消失"
+  },
+  "3": {
+   "name": "遍体鳞伤",
+   "desc": "1D10 小时后清醒，满身拳痕瘀伤，**HP 降为疯狂前的一半**（不构成重伤），未被窃"
+  },
+  "4": {
+   "name": "暴力倾向",
+   "desc": "强烈的暴力与破坏欲；是否杀人由守秘人决定"
+  },
+  "5": {
+   "name": "极端信念",
+   "desc": "以极端疯狂的方式展示背景中某项「思想/信念」（如在地铁高声布道）"
+  },
+  "6": {
+   "name": "重要之人",
+   "desc": "1D10 小时或更久内不顾一切地接近背景中的「重要之人」并依关系行动"
+  },
+  "7": {
+   "name": "被收容",
+   "desc": "在精神病院病房或警察局牢房中回神"
+  },
+  "8": {
+   "name": "逃避行为",
+   "desc": "在很远的地方清醒（荒郊野岭、开往远方的列车等）"
+  },
+  "9": {
+   "name": "恐惧",
+   "desc": "骰 D100 查恐惧症状表，获得新的恐惧症；1D10 小时后回神并设法避开恐惧源"
+  },
+  "10": {
+   "name": "躁狂",
+   "desc": "骰 D100 查躁狂症状表，获得新的躁狂症；1D10 小时后回神"
+  }
+ },
+ "phobias": {
+  "1": {
+   "name": "洗澡恐惧症(Ablutophobia)",
+   "desc": "对于洗涤或洗澡的恐惧"
+  },
+  "2": {
+   "name": "恐高症(Acrophobia)",
+   "desc": "对于身处高处的恐惧"
+  },
+  "3": {
+   "name": "飞行恐惧症(Aerophobia)",
+   "desc": "对飞行的恐惧"
+  },
+  "4": {
+   "name": "广场恐惧症(Agoraphobia)",
+   "desc": "对于开放的(拥挤)公共场所的恐惧"
+  },
+  "5": {
+   "name": "恐鸡症(Alektorophobia)",
+   "desc": "对鸡的恐惧"
+  },
+  "6": {
+   "name": "大蒜恐惧症(Alliumphobia)",
+   "desc": "对大蒜的恐惧"
+  },
+  "7": {
+   "name": "乘车恐惧症(Amaxophobia)",
+   "desc": "对于乘坐地面载具的恐惧"
+  },
+  "8": {
+   "name": "恐风症(Ancraophobia)",
+   "desc": "对风的恐惧"
+  },
+  "9": {
+   "name": "男性恐惧症(Androphobia)",
+   "desc": "对于成年男性的恐惧"
+  },
+  "10": {
+   "name": "恐英症(Anglophobia)",
+   "desc": "对英格兰或英格兰文化的恐惧"
+  },
+  "11": {
+   "name": "恐花症(Anthophobia)",
+   "desc": "对花的恐惧"
+  },
+  "12": {
+   "name": "截肢者恐惧症(Apotemnophobia)",
+   "desc": "对截肢者的恐惧"
+  },
+  "13": {
+   "name": "蜘蛛恐惧症(Arachnophobia)",
+   "desc": "对蜘蛛的恐惧"
+  },
+  "14": {
+   "name": "闪电恐惧症(Astraphobia)",
+   "desc": "对闪电的恐惧"
+  },
+  "15": {
+   "name": "废墟恐惧症(Atephobia)",
+   "desc": "对遗迹或残址的恐惧"
+  },
+  "16": {
+   "name": "长笛恐惧症(Aulophobia)",
+   "desc": "对长笛的恐惧"
+  },
+  "17": {
+   "name": "细菌恐惧症(Bacteriophobia)",
+   "desc": "对细菌的恐惧"
+  },
+  "18": {
+   "name": "导弹/子弹恐惧症(Ballistophobia)",
+   "desc": "对导弹或子弹的恐惧"
+  },
+  "19": {
+   "name": "跌落恐惧症(Basophobia)",
+   "desc": "对于跌倒或摔落的恐惧"
+  },
+  "20": {
+   "name": "书籍恐惧症(Bibliophobia)",
+   "desc": "对书籍的恐惧"
+  },
+  "21": {
+   "name": "植物恐惧症(Botanophobia)",
+   "desc": "对植物的恐惧"
+  },
+  "22": {
+   "name": "美女恐惧症(Caligynephobia)",
+   "desc": "对美貌女性的恐惧"
+  },
+  "23": {
+   "name": "寒冷恐惧症(Cheimaphobia)",
+   "desc": "对寒冷的恐惧"
+  },
+  "24": {
+   "name": "恐钟表症(Chronomentrophobia)",
+   "desc": "对于钟表的恐惧"
+  },
+  "25": {
+   "name": "幽闭恐惧症(Claustrophobia)",
+   "desc": "对于处在封闭的空间中的恐惧"
+  },
+  "26": {
+   "name": "小丑恐惧症(Coulrophobia)",
+   "desc": "对小丑的恐惧"
+  },
+  "27": {
+   "name": "恐犬症(Cynophobia)",
+   "desc": "对狗的恐惧"
+  },
+  "28": {
+   "name": "恶魔恐惧症(Demonophobia)",
+   "desc": "对邪灵或恶魔的恐惧"
+  },
+  "29": {
+   "name": "人群恐惧症(Demophobia)",
+   "desc": "对人群的恐惧"
+  },
+  "30": {
+   "name": "牙科恐惧症①(Dentophobia)",
+   "desc": "对牙医的恐惧"
+  },
+  "31": {
+   "name": "丢弃恐惧症(Disposophobia)",
+   "desc": "对于丢弃物件的恐惧(贮藏癖)"
+  },
+  "32": {
+   "name": "皮毛恐惧症(Doraphobia)",
+   "desc": "对动物皮毛的恐惧"
+  },
+  "33": {
+   "name": "过马路恐惧症(Dromophobia)",
+   "desc": "对于过马路的恐惧"
+  },
+  "34": {
+   "name": "教堂恐惧症(Ecclesiophobia)",
+   "desc": "对教堂的恐惧"
+  },
+  "35": {
+   "name": "镜子恐惧症(Eisoptrophobia)",
+   "desc": "对镜子的恐惧"
+  },
+  "36": {
+   "name": "针尖恐惧症(Enetophobia)",
+   "desc": "对针或大头针的恐惧"
+  },
+  "37": {
+   "name": "昆虫恐惧症(Entomophobia)",
+   "desc": "对昆虫的恐惧"
+  },
+  "38": {
+   "name": "恐猫症(Felinophobia)",
+   "desc": "对猫的恐惧"
+  },
+  "39": {
+   "name": "过桥恐惧症(Gephyrophobia)",
+   "desc": "对于过桥的恐惧"
+  },
+  "40": {
+   "name": "恐老症(Gerontophobia)",
+   "desc": "对于老年人或变老的恐惧"
+  },
+  "41": {
+   "name": "恐女症(Gynophobia)",
+   "desc": "对女性的恐惧"
+  },
+  "42": {
+   "name": "恐血症(Haemaphobia)",
+   "desc": "对血的恐惧"
+  },
+  "43": {
+   "name": "宗教罪行恐惧症(Hamartophobia)",
+   "desc": "对宗教罪行的恐惧"
+  },
+  "44": {
+   "name": "触摸恐惧症(Haphophobia)",
+   "desc": "对于被触摸的恐惧"
+  },
+  "45": {
+   "name": "爬虫恐惧症(Herpetophobia)",
+   "desc": "对爬行动物的恐惧"
+  },
+  "46": {
+   "name": "迷雾恐惧症(Homichlophobia)",
+   "desc": "对雾的恐惧"
+  },
+  "47": {
+   "name": "火器恐惧症(Hoplophobia)",
+   "desc": "对火器的恐惧"
+  },
+  "48": {
+   "name": "恐水症(Hydrophobia)",
+   "desc": "对水的恐惧"
+  },
+  "49": {
+   "name": "催眠恐惧症①(Hypnophobia)",
+   "desc": "对于睡眠或被催眠的恐惧"
+  },
+  "50": {
+   "name": "白袍恐惧症(Iatrophobia)",
+   "desc": "对医生的恐惧"
+  },
+  "51": {
+   "name": "鱼类恐惧症(Ichthyophobia)",
+   "desc": "对鱼的恐惧"
+  },
+  "52": {
+   "name": "蟑螂恐惧症(Katsaridaphobia)",
+   "desc": "对蟑螂的恐惧"
+  },
+  "53": {
+   "name": "雷鸣恐惧症(Keraunophobia)",
+   "desc": "对雷声的恐惧"
+  },
+  "54": {
+   "name": "蔬菜恐惧症(Lachanophobia)",
+   "desc": "对蔬菜的恐惧"
+  },
+  "55": {
+   "name": "噪音恐惧症(Ligyrophobia)",
+   "desc": "对刺耳噪音的恐惧"
+  },
+  "56": {
+   "name": "恐湖症(Limnophobia)",
+   "desc": "对湖泊的恐惧"
+  },
+  "57": {
+   "name": "机械恐惧症(Mechanophobia)",
+   "desc": "对机器或机械的恐惧"
+  },
+  "58": {
+   "name": "巨物恐惧症(Megalophobia)",
+   "desc": "对于庞大物件的恐惧"
+  },
+  "59": {
+   "name": "捆绑恐惧症(Merinthophobia)",
+   "desc": "对于被捆绑或紧缚的恐惧"
+  },
+  "60": {
+   "name": "流星恐惧症(Meteorophobia)",
+   "desc": "对流星或陨石的恐惧"
+  },
+  "61": {
+   "name": "孤独恐惧症(Monophobia)",
+   "desc": "对于一人独处的恐惧"
+  },
+  "62": {
+   "name": "不洁恐惧症(Mysophobia)",
+   "desc": "对污垢或污染的恐惧"
+  },
+  "63": {
+   "name": "黏液恐惧症(Myxophobia)",
+   "desc": "对黏液(史莱姆)的恐惧"
+  },
+  "64": {
+   "name": "尸体恐惧症(Necrophobia)",
+   "desc": "对尸体的恐惧"
+  },
+  "65": {
+   "name": "数字8恐惧症(Octophobia)",
+   "desc": "对数字8的恐惧"
+  },
+  "66": {
+   "name": "恐牙症(Odontophobia)",
+   "desc": "对牙齿的恐惧"
+  },
+  "67": {
+   "name": "恐梦症(Oneirophobia)",
+   "desc": "对梦境的恐惧"
+  },
+  "68": {
+   "name": "称呼恐惧症(Onomatophobia)",
+   "desc": "对于特定词语的恐惧"
+  },
+  "69": {
+   "name": "恐蛇症(Ophidiophobia)",
+   "desc": "对蛇的恐惧"
+  },
+  "70": {
+   "name": "恐鸟症(Ornithophobia)",
+   "desc": "对鸟的恐惧"
+  },
+  "71": {
+   "name": "寄生虫恐惧症(Parasitophobia)",
+   "desc": "对寄生虫的恐惧"
+  },
+  "72": {
+   "name": "人偶恐惧症(Pediophobia)",
+   "desc": "对人偶的恐惧"
+  },
+  "73": {
+   "name": "吞咽恐惧症(Phagophobia)",
+   "desc": "对于吞咽或被吞咽的恐惧"
+  },
+  "74": {
+   "name": "药物恐惧症(Pharmacophobia)",
+   "desc": "对药物的恐惧"
+  },
+  "75": {
+   "name": "幽灵恐惧症(Phasmophobia)",
+   "desc": "对鬼魂的恐惧"
+  },
+  "76": {
+   "name": "日光恐惧症(Phenogophobia)",
+   "desc": "对日光的恐惧"
+  },
+  "77": {
+   "name": "胡须恐惧症(Pogonophobia)",
+   "desc": "对胡须的恐惧"
+  },
+  "78": {
+   "name": "河流恐惧症(Potamophobia)",
+   "desc": "对河流的恐惧"
+  },
+  "79": {
+   "name": "酒精恐惧症(Potophobia)",
+   "desc": "对酒或酒精的恐惧"
+  },
+  "80": {
+   "name": "恐火症(Pyrophobia)",
+   "desc": "对火的恐惧"
+  },
+  "81": {
+   "name": "魔法恐惧症(Rhabdophobia)",
+   "desc": "对魔法的恐惧"
+  },
+  "82": {
+   "name": "黑暗恐惧症(Scotophobia)",
+   "desc": "对黑暗或夜晚的恐惧"
+  },
+  "83": {
+   "name": "恐月症(Selenophobia)",
+   "desc": "对月亮的恐惧"
+  },
+  "84": {
+   "name": "火车恐惧症(Siderodromophobia)",
+   "desc": "对于乘坐火车出行的恐惧"
+  },
+  "85": {
+   "name": "恐星症(Siderophobia)",
+   "desc": "对星星的恐惧"
+  },
+  "86": {
+   "name": "狭室恐惧症(Stenophobia)",
+   "desc": "对狭小物件或地点的恐惧"
+  },
+  "87": {
+   "name": "对称恐惧症(Symmetrophobia)",
+   "desc": "对对称的恐惧"
+  },
+  "88": {
+   "name": "活埋恐惧症(Taphephobia)",
+   "desc": "对于被活埋或墓地的恐惧"
+  },
+  "89": {
+   "name": "公牛恐惧症(Taurophobia)",
+   "desc": "对公牛的恐惧"
+  },
+  "90": {
+   "name": "电话恐惧症(Telephonophobia)",
+   "desc": "对电话的恐惧"
+  },
+  "91": {
+   "name": "怪物恐惧症①(Teratophobia)",
+   "desc": "对怪物的恐惧"
+  },
+  "92": {
+   "name": "深海恐惧症(Thalassophobia)",
+   "desc": "对海洋的恐惧"
+  },
+  "93": {
+   "name": "手术恐惧症(Tomophobia)",
+   "desc": "对外科手术的恐惧"
+  },
+  "94": {
+   "name": "十三恐惧症(Triskadekaphobia)",
+   "desc": "对数字13的恐惧症"
+  },
+  "95": {
+   "name": "衣物恐惧症(Vestiphobia)",
+   "desc": "对衣物的恐惧"
+  },
+  "96": {
+   "name": "女巫恐惧症(Wiccaphobia)",
+   "desc": "对女巫与巫术的恐惧"
+  },
+  "97": {
+   "name": "黄色恐惧症(Xanthophobia)",
+   "desc": "对黄色或\"黄\"字的恐惧"
+  },
+  "98": {
+   "name": "外语恐惧症(Xenoglossophobia)",
+   "desc": "对外语的恐惧"
+  },
+  "99": {
+   "name": "异域恐惧症(Xenophobia)",
+   "desc": "对陌生人或外国人的恐惧"
+  },
+  "100": {
+   "name": "动物恐惧症(Zoophobia)",
+   "desc": "对动物的恐惧"
+  }
+ },
+ "manias": {
+  "1": {
+   "name": "沐浴癖(Ablutomania)",
+   "desc": "执着于清洗自己"
+  },
+  "2": {
+   "name": "犹豫癖(Aboulomania)",
+   "desc": "病态地犹豫不定"
+  },
+  "3": {
+   "name": "喜暗狂(Achluomania)",
+   "desc": "对黑暗的过度热爱"
+  },
+  "4": {
+   "name": "喜高狂(Acromaniaheights)",
+   "desc": "狂热迷恋高处"
+  },
+  "5": {
+   "name": "亲切癖(Agathomania)",
+   "desc": "病态地对他人友好"
+  },
+  "6": {
+   "name": "喜旷症(Agromania)",
+   "desc": "强烈地倾向于待在开阔空间中"
+  },
+  "7": {
+   "name": "喜尖狂(Aichmomania)",
+   "desc": "痴迷于尖锐或锋利的物体"
+  },
+  "8": {
+   "name": "恋猫狂(Ailuromania)",
+   "desc": "近乎病态地对猫友善"
+  },
+  "9": {
+   "name": "疼痛癖(Algomania)",
+   "desc": "痴迷于疼痛"
+  },
+  "10": {
+   "name": "喜蒜狂(Alliomania)",
+   "desc": "痴迷于大蒜"
+  },
+  "11": {
+   "name": "乘车癖(Amaxomania)",
+   "desc": "痴迷于乘坐车辆"
+  },
+  "12": {
+   "name": "欣快癖(Amenomania)",
+   "desc": "不正常地感到喜悦"
+  },
+  "13": {
+   "name": "喜花狂(Anthomania)",
+   "desc": "痴迷于花朵"
+  },
+  "14": {
+   "name": "计算癖(Arithmomania)",
+   "desc": "狂热地痴迷于数字"
+  },
+  "15": {
+   "name": "消费癖(Asoticamania)",
+   "desc": "鲁莽冲动地消费"
+  },
+  "16": {
+   "name": "隐居癖(Automania)",
+   "desc": "过度地热爱独自隐居（原文如此，存疑，Automania 实际上是恋车癖）"
+  },
+  "17": {
+   "name": "芭蕾癖(Balletmania)",
+   "desc": "痴迷于芭蕾舞"
+  },
+  "18": {
+   "name": "窃书癖(Biliokleptomania)",
+   "desc": "无法克制偷窃书籍的冲动"
+  },
+  "19": {
+   "name": "恋书狂(Bibliomania)",
+   "desc": "痴迷于书籍和/或阅读"
+  },
+  "20": {
+   "name": "磨牙癖(Bruxomania)",
+   "desc": "无法克制磨牙的冲动"
+  },
+  "21": {
+   "name": "灵臆症(Cacodemomania)",
+   "desc": "病态地坚信自己已被一个邪恶的灵体占据"
+  },
+  "22": {
+   "name": "美貌狂(Callomania)",
+   "desc": "痴迷于自身的美貌"
+  },
+  "23": {
+   "name": "地图狂(Cartacoethes)",
+   "desc": "在何时何处都无法控制查阅地图的冲动"
+  },
+  "24": {
+   "name": "跳跃狂(Catapedamania)",
+   "desc": "痴迷于从高处跳下"
+  },
+  "25": {
+   "name": "喜冷症(Cheimatomania)",
+   "desc": "对寒冷或寒冷的物体的反常喜爱"
+  },
+  "26": {
+   "name": "舞蹈狂(Choreomania)",
+   "desc": "无法控制地起舞或发颤"
+  },
+  "27": {
+   "name": "恋床癖(Clinomania)",
+   "desc": "过度地热爱待在床上"
+  },
+  "28": {
+   "name": "恋墓狂(Coimetormania)",
+   "desc": "痴迷于墓地"
+  },
+  "29": {
+   "name": "色彩狂(Coloromania)",
+   "desc": "痴迷于某种颜色"
+  },
+  "30": {
+   "name": "小丑狂(Coulromania)",
+   "desc": "痴迷于小丑"
+  },
+  "31": {
+   "name": "恐惧狂(Countermania)",
+   "desc": "执着于经历恐怖的场面"
+  },
+  "32": {
+   "name": "杀戮癖(Dacnomania)",
+   "desc": "痴迷于杀戮"
+  },
+  "33": {
+   "name": "魔臆症(Demonomania)",
+   "desc": "病态地坚信自己已被恶魔附身"
+  },
+  "34": {
+   "name": "抓挠癖(Dermatillomania)",
+   "desc": "执着于抓挠自己的皮肤"
+  },
+  "35": {
+   "name": "正义狂(Dikemania)",
+   "desc": "痴迷于目睹正义被伸张"
+  },
+  "36": {
+   "name": "嗜酒狂(Dipsomania)",
+   "desc": "反常地渴求酒精"
+  },
+  "37": {
+   "name": "毛皮狂(Doramania)",
+   "desc": "痴迷于拥有毛皮（存疑）"
+  },
+  "38": {
+   "name": "赠物癖(Doromania)",
+   "desc": "痴迷于赠送礼物"
+  },
+  "39": {
+   "name": "漂泊症(Drapetomania)",
+   "desc": "执着于逃离"
+  },
+  "40": {
+   "name": "漫游癖(Ecdemiomania)",
+   "desc": "执着于四处漫游"
+  },
+  "41": {
+   "name": "自恋狂(Egomania)",
+   "desc": "近乎病态地以自我为中心或自我崇拜"
+  },
+  "42": {
+   "name": "职业狂(Empleomania)",
+   "desc": "对于工作的无尽病态渴求"
+  },
+  "43": {
+   "name": "臆罪症(Enosimania)",
+   "desc": "病态地坚信自己带有罪孽"
+  },
+  "44": {
+   "name": "学识狂(Epistemomania)",
+   "desc": "痴迷于获取学识"
+  },
+  "45": {
+   "name": "静止癖(Eremiomania)",
+   "desc": "执着于保持安静"
+  },
+  "46": {
+   "name": "乙醚上瘾(Etheromania)",
+   "desc": "渴求乙醚"
+  },
+  "47": {
+   "name": "求婚狂(Gamomania)",
+   "desc": "痴迷于进行奇特的求婚"
+  },
+  "48": {
+   "name": "狂笑癖(Geliomania)",
+   "desc": "无法自制地、强迫性地大笑"
+  },
+  "49": {
+   "name": "巫术狂(Goetomania)",
+   "desc": "痴迷于女巫与巫术"
+  },
+  "50": {
+   "name": "写作癖(Graphomania)",
+   "desc": "痴迷于将每一件事写下来"
+  },
+  "51": {
+   "name": "裸体狂(Gymnomania)",
+   "desc": "执着于裸露身体"
+  },
+  "52": {
+   "name": "妄想狂(Habromania)",
+   "desc": "近乎病态地充满愉快的妄想（而不顾现实状况如何）"
+  },
+  "53": {
+   "name": "蠕虫狂(Helminthomania)",
+   "desc": "过度地喜爱蠕虫"
+  },
+  "54": {
+   "name": "枪械狂(Hoplomania)",
+   "desc": "痴迷于火器"
+  },
+  "55": {
+   "name": "饮水狂(Hydromania)",
+   "desc": "反常地渴求水分"
+  },
+  "56": {
+   "name": "喜鱼癖(Ichthyomania)",
+   "desc": "痴迷于鱼类"
+  },
+  "57": {
+   "name": "图标狂(Iconomania)",
+   "desc": "痴迷于图标与肖像"
+  },
+  "58": {
+   "name": "偶像狂(Idolomania)",
+   "desc": "痴迷于甚至愿献身于某个偶像"
+  },
+  "59": {
+   "name": "信息狂(Infomania)",
+   "desc": "痴迷于积累各种信息与资讯"
+  },
+  "60": {
+   "name": "射击狂(Klazomania)",
+   "desc": "反常地执着于射击"
+  },
+  "61": {
+   "name": "偷窃癖(Kleptomania)",
+   "desc": "反常地执着于偷窃"
+  },
+  "62": {
+   "name": "噪音癖(Ligyromania)",
+   "desc": "无法自制地执着于制造响亮或刺耳的噪音"
+  },
+  "63": {
+   "name": "喜线癖(Linonomania)",
+   "desc": "痴迷于线绳"
+  },
+  "64": {
+   "name": "彩票狂(Lotterymania)",
+   "desc": "极端地执着于购买彩票"
+  },
+  "65": {
+   "name": "抑郁症(Lypemania)",
+   "desc": "近乎病态的重度抑郁倾向"
+  },
+  "66": {
+   "name": "巨石狂(Megalithomania)",
+   "desc": "当站在石环中或立起的巨石旁时，就会近乎病态地写出各种奇怪的创意"
+  },
+  "67": {
+   "name": "旋律狂(Melomania)",
+   "desc": "痴迷于音乐或一段特定的旋律"
+  },
+  "68": {
+   "name": "作诗癖(Metromania)",
+   "desc": "无法抑制地想要不停作诗"
+  },
+  "69": {
+   "name": "憎恨癖(Misomania)",
+   "desc": "憎恨一切事物，痴迷于憎恨某个事物或团体"
+  },
+  "70": {
+   "name": "偏执狂(Monomania)",
+   "desc": "近乎病态地痴迷与专注某个特定的想法或创意"
+  },
+  "71": {
+   "name": "夸大癖(Mythomania)",
+   "desc": "以一种近乎病态的程度说谎或夸大事物"
+  },
+  "72": {
+   "name": "臆想症(Nosomania)",
+   "desc": "妄想自己正在被某种臆想出的疾病折磨"
+  },
+  "73": {
+   "name": "记录癖(Notomania)",
+   "desc": "执着于记录一切事物(例如摄影)"
+  },
+  "74": {
+   "name": "恋名狂(Onomamania)",
+   "desc": "痴迷于名字(人物的、地点的、事物的)"
+  },
+  "75": {
+   "name": "称名癖(Onomatomania)",
+   "desc": "无法抑制地不断重复某个词语的冲动"
+  },
+  "76": {
+   "name": "剔指癖(Onychotillomania)",
+   "desc": "执着于剔指甲"
+  },
+  "77": {
+   "name": "恋食癖(Opsomania)",
+   "desc": "对某种食物的病态热爱"
+  },
+  "78": {
+   "name": "抱怨癖(Paramania)",
+   "desc": "一种在抱怨时产生的近乎病态的愉悦感"
+  },
+  "79": {
+   "name": "面具狂(Personamania)",
+   "desc": "执着于佩戴面具"
+  },
+  "80": {
+   "name": "幽灵狂(Phasmomania)",
+   "desc": "痴迷于幽灵"
+  },
+  "81": {
+   "name": "谋杀癖(Phonomania)",
+   "desc": "病态的谋杀倾向"
+  },
+  "82": {
+   "name": "渴光癖(Photomania)",
+   "desc": "对光的病态渴求"
+  },
+  "83": {
+   "name": "背德癖(Planomania)",
+   "desc": "病态地渴求违背社会道德（原文如此，存疑，Planomania 实际上是漂泊症）"
+  },
+  "84": {
+   "name": "求财癖(Plutomania)",
+   "desc": "对财富的强迫性的渴望"
+  },
+  "85": {
+   "name": "欺骗狂(Pseudomania)",
+   "desc": "无法抑制地执着于撒谎"
+  },
+  "86": {
+   "name": "纵火狂(Pyromania)",
+   "desc": "执着于纵火"
+  },
+  "87": {
+   "name": "提问狂(Questiong-Asking Mania)",
+   "desc": "执着于提问"
+  },
+  "88": {
+   "name": "挖鼻癖(Rhinotillexomania)",
+   "desc": "执着于挖鼻子"
+  },
+  "89": {
+   "name": "涂鸦癖(Scribbleomania)",
+   "desc": "沉迷于涂鸦"
+  },
+  "90": {
+   "name": "列车狂(Siderodromomania)",
+   "desc": "认为火车或类似的依靠轨道交通的旅行方式充满魅力"
+  },
+  "91": {
+   "name": "臆智症(Sophomania)",
+   "desc": "臆想自己拥有难以置信的智慧"
+  },
+  "92": {
+   "name": "科技狂(Technomania)",
+   "desc": "痴迷于新的科技"
+  },
+  "93": {
+   "name": "臆咒狂(Thanatomania)",
+   "desc": "坚信自己已被某种死亡魔法所诅咒"
+  },
+  "94": {
+   "name": "臆神狂(Theomania)",
+   "desc": "坚信自己是一位神灵"
+  },
+  "95": {
+   "name": "抓挠癖(Titillomaniac)",
+   "desc": "抓挠自己的强迫倾向"
+  },
+  "96": {
+   "name": "手术狂(Tomomania)",
+   "desc": "对进行手术的不正常爱好"
+  },
+  "97": {
+   "name": "拔毛癖(Trichotillomania)",
+   "desc": "执着于拔下自己的头发"
+  },
+  "98": {
+   "name": "臆盲症(Typhlomania)",
+   "desc": "病理性的失明"
+  },
+  "99": {
+   "name": "嗜外狂(Xenomania)",
+   "desc": "痴迷于异国的事物"
+  },
+  "100": {
+   "name": "喜兽癖(Zoomania)",
+   "desc": "对待动物的态度近乎疯狂地友好"
+  }
+ }
+}

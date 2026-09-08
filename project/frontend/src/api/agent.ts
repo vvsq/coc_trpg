@@ -55,6 +55,7 @@ export interface LlmStatus {
   api_key_masked: string
   timeout: number
   retries: number
+  disable_thinking: boolean
   mock_mode: boolean
   light_base_url: string
   light_model: string
@@ -68,7 +69,8 @@ export async function getLlmStatus(): Promise<LlmStatus> {
 }
 
 /** PUT /llm/config 请求体：api_key 空 = 保持现有 key（掩码语义）；
- * light_* 留空 = 清除轻任务配置（跟随主模型） */
+ * light_* 留空 = 清除轻任务配置（跟随主模型）；
+ * timeout/retries/disable_thinking 运行时可调（4.4+ 修复配置悬空） */
 export interface LlmConfigBody {
   base_url?: string
   api_key?: string
@@ -76,6 +78,9 @@ export interface LlmConfigBody {
   light_base_url?: string
   light_api_key?: string
   light_model?: string
+  timeout?: number
+  retries?: number
+  disable_thinking?: boolean
 }
 
 /** 保存 LLM 配置（写 backend/.env 并热重载），返回保存后的状态 */
@@ -96,7 +101,8 @@ export async function probeLlmModels(): Promise<LlmModelsResult> {
   return client.get<LlmModelsResult, LlmModelsResult>('/llm/models')
 }
 
-/** POST /llm/test 响应：真实打一次 LLM；失败也 200，ok=false 带中文原因 */
+/** POST /llm/test 响应：真实打一次 LLM；失败也 200，ok=false 带中文原因。
+ * 配置了轻任务模型时一并 ping（light_ok=false 表示轻模型不通） */
 export interface LlmTestResult {
   ok: boolean
   latency_ms?: number
@@ -104,6 +110,10 @@ export interface LlmTestResult {
   provider?: string
   category?: string
   error?: string
+  light_latency_ms?: number
+  light_model?: string
+  light_ok?: boolean
+  light_error?: string
 }
 
 export async function testLlm(): Promise<LlmTestResult> {

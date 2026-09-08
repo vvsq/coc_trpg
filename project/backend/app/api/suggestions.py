@@ -70,6 +70,8 @@ class LlmConfigRequest(BaseModel):
     """KP 设置面板保存体。字段均可选；api_key 空 = 保持现有（掩码语义）。
 
     4.4：light_* 是轻任务分级路由（留空=跟随主模型）；写 llm_config 表（DB 权威）。
+    4.4+：timeout/retries/disable_thinking 运行时可调（此前只能在首次 seed 生效，
+    DB 权威后设置面板改不了导致混合推理模型 30s 超时无法自救——用户实测反馈修复）。
     """
 
     base_url: str | None = Field(default=None, max_length=300)
@@ -78,6 +80,9 @@ class LlmConfigRequest(BaseModel):
     light_base_url: str | None = Field(default=None, max_length=300)
     light_api_key: str | None = Field(default=None, max_length=300)
     light_model: str | None = Field(default=None, max_length=100)
+    timeout: float | None = Field(default=None, ge=5, le=3600)
+    retries: int | None = Field(default=None, ge=0, le=5)
+    disable_thinking: bool | None = None
 
 
 class KpStyleCreateRequest(BaseModel):
@@ -104,6 +109,7 @@ def _status_payload(s) -> dict:
         'api_key_masked': s.api_key_masked,
         'timeout': s.timeout,
         'retries': s.retries,
+        'disable_thinking': s.disable_thinking,
         'mock_mode': s.mock_mode,
         'light_base_url': s.light_base_url,
         'light_model': s.light_model,
@@ -218,6 +224,13 @@ async def llm_config(body: LlmConfigRequest):
                     status_code=400, detail='light_base_url 必须以 http:// 或 https:// 开头',
                 )
             updates[field] = v
+    # 运行时参数（4.4+）：timeout/retries/disable_thinking 直通 save_settings
+    if body.timeout is not None:
+        updates['timeout'] = float(body.timeout)
+    if body.retries is not None:
+        updates['retries'] = int(body.retries)
+    if body.disable_thinking is not None:
+        updates['disable_thinking'] = bool(body.disable_thinking)
     s = save_settings(updates) if updates else get_settings()
     return _status_payload(s)
 
@@ -241,7 +254,13 @@ async def llm_models():
 
 @router.post('/llm/test')
 async def llm_test():
-    """最小连通性测试：真实打一次 LLM。失败也 200，ok=false 带中文原因。"""
+    """最小连通性测试：真实打一次 LLM。失败也 200，ok=false 带中文原因。
+
+    4.4+：单独配置了轻任务模型时一并 ping（此前轻模型是测试盲区——
+    主模型 ping 通过而建议链路超时，KP 无从分辨）。
+    """
+    from app.llm.provider import get_light_client
+
     s = get_settings()
     if not s.enabled:
         return {'ok': False, 'category': 'not_configured',
@@ -250,7 +269,15 @@ async def llm_test():
         latency = await get_client().ping()
     except LLMUnavailableError as exc:
         return {'ok': False, 'category': exc.category, 'error': exc.message}
-    return {'ok': True, 'latency_ms': latency, 'model': s.model, 'provider': s.provider}
+    result: dict = {'ok': True, 'latency_ms': latency, 'model': s.model, 'provider': s.provider}
+    if getattr(s, 'light_ready', False):  # getattr：兼容测试用轻量 fake 配置
+        try:
+            result['light_latency_ms'] = await get_light_client().ping()
+            result['light_model'] = s.light_model
+        except LLMUnavailableError as exc:
+            result['light_ok'] = False
+            result['light_error'] = exc.message
+    return result
 
 
 # ==================== 4.4：KP 风格系统（goal §6.2） ====================

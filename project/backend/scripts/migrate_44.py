@@ -10,6 +10,14 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
+
+from pathlib import Path
+
+# 保证能 import app.* ：无论从哪个目录启动，都把 backend/ 根加入 sys.path
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from sqlmodel import SQLModel
 

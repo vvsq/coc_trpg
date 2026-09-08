@@ -26,6 +26,8 @@ const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 const form = ref({
   base_url: '', api_key: '', model: '',
   light_base_url: '', light_api_key: '', light_model: '',
+  timeout: 600,
+  thinking: 'off' as 'on' | 'off', // 混合推理模型（qwen3/DeepSeek 系）思考开关
 })
 const loaded = ref<LlmStatus | null>(null) // 打开时的已保存配置快照（判断脏）
 const loading = ref(false)
@@ -69,7 +71,9 @@ const dirty = computed(() => {
     form.value.api_key.trim() !== '' ||
     form.value.light_base_url !== (loaded.value.light_base_url || '') ||
     form.value.light_model !== (loaded.value.light_model || '') ||
-    form.value.light_api_key.trim() !== ''
+    form.value.light_api_key.trim() !== '' ||
+    form.value.timeout !== loaded.value.timeout ||
+    (loaded.value.disable_thinking ? 'off' : 'on') !== form.value.thinking
   )
 })
 
@@ -92,6 +96,8 @@ watch(
       form.value.light_base_url = status.light_base_url || ''
       form.value.light_model = status.light_model || ''
       form.value.light_api_key = ''
+      form.value.timeout = status.timeout ?? 600
+      form.value.thinking = status.disable_thinking ? 'off' : 'on'
     } catch {
       // 拦截器已提示；对话框仍可填写（保存时后端会校验）
     } finally {
@@ -131,12 +137,15 @@ async function persist(): Promise<boolean> {
   }
   saving.value = true
   try {
-    const body: Record<string, string> = {
+    const body: Record<string, unknown> = {
       base_url,
       model: form.value.model.trim(),
       // light_* 始终显式提交（含空串=清除，跟随主模型）
       light_base_url,
       light_model: form.value.light_model.trim(),
+      // 运行时参数（4.4+）：超时秒数 + 混合推理模型思考开关
+      timeout: form.value.timeout,
+      disable_thinking: form.value.thinking === 'off',
     }
     if (form.value.api_key.trim()) body.api_key = form.value.api_key.trim()
     if (form.value.light_api_key.trim()) body.light_api_key = form.value.light_api_key.trim()
@@ -148,6 +157,8 @@ async function persist(): Promise<boolean> {
     form.value.light_base_url = status.light_base_url || ''
     form.value.light_model = status.light_model || ''
     form.value.light_api_key = ''
+    form.value.timeout = status.timeout
+    form.value.thinking = status.disable_thinking ? 'off' : 'on'
     testResult.value = null
     ElMessage.success('已保存（写入 llm_config 数据库，全局生效）')
     return true
@@ -179,8 +190,15 @@ async function runTest(): Promise<void> {
   testResult.value = null
   try {
     const res = await testLlm()
+    let text = `连通正常 · 延迟 ${res.latency_ms}ms · ${res.model}`
+    if (res.light_model) {
+      // 轻任务模型一并测试（消盲区）：不通时明确提示建议链路仍会失败
+      text += res.light_ok !== false
+        ? ` · 轻模型 ${res.light_model} ${res.light_latency_ms}ms`
+        : ` · ⚠ 轻模型 ${res.light_model} 不通：${res.light_error ?? '未知原因'}`
+    }
     testResult.value = res.ok
-      ? { ok: true, text: `连通正常 · 延迟 ${res.latency_ms}ms · ${res.model}` }
+      ? { ok: res.light_ok !== false, text }
       : { ok: false, text: res.error ?? '测试失败' }
   } catch {
     testResult.value = { ok: false, text: '请求失败' } // 拦截器已提示
@@ -274,6 +292,27 @@ async function runProbe(): Promise<void> {
             style="width: 100%"
           >
             <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />
+          </el-select>
+        </el-form-item>
+
+        <!-- 运行时参数（4.4+）：超时与思考开关，此前 DB 权威后改不了导致 30s 超时无法自救 -->
+        <el-form-item label="请求超时">
+          <div class="timeout-row">
+            <el-input-number
+              v-model="form.timeout"
+              :min="30"
+              :max="3600"
+              :step="30"
+              controls-position="right"
+              size="small"
+            />
+            <span class="timeout-unit">秒（推理模型/长上下文建议 ≥300）</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="思考模式">
+          <el-select v-model="form.thinking" size="small" style="width: 100%">
+            <el-option label="关闭思考（qwen3 / DeepSeek 混合推理建议关闭，非流式更快）" value="off" />
+            <el-option label="开启思考（模型深度推理，耗时明显变长）" value="on" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -381,6 +420,17 @@ async function runProbe(): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.timeout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeout-unit {
+  font-size: 11px;
+  color: #909399;
 }
 
 .preset-tag {

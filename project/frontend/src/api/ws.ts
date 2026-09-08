@@ -14,6 +14,10 @@ type StatusHandler = (connected: boolean) => void
 
 const HEARTBEAT_INTERVAL = 15_000
 const RECONNECT_DELAY = 2_000
+/** 无 pong 判死阈值：后台标签 intensive throttling 下 setInterval 最低 1 次/分钟，
+ * 阈值必须 > 60s（节流周期）+ 余量，否则会把活连接误杀（4.4+ 修复：切标签页
+ * 被判掉线的根因之一）。页面隐藏期间直接跳过判死检查，交给服务端宽限。 */
+const PONG_TIMEOUT = 90_000
 
 class WsClient {
   private ws: WebSocket | null = null
@@ -98,8 +102,11 @@ class WsClient {
   private startHeartbeat(): void {
     this.stopHeartbeat()
     this.heartbeatTimer = window.setInterval(() => {
-      if (Date.now() - this.lastPongAt > HEARTBEAT_INTERVAL * 2) {
-        // 连续两个周期无 pong：连接假死，主动断开走 onclose 重连
+      // 后台节流期间定时器本身会被推迟/暂停，判死检查跳过（交给服务端宽限），
+      // 防止"回调 60s 后才执行 → 发现 60s 无 pong → 误杀活连接"的假死判定
+      if (document.hidden) return
+      if (Date.now() - this.lastPongAt > PONG_TIMEOUT) {
+        // 长时间无 pong：连接假死，主动断开走 onclose 重连
         this.ws?.close()
         return
       }
@@ -131,13 +138,32 @@ class WsClient {
     }
   }
 
-  /** 主动关闭（离开房间时调用），不再自动重连 */
+  constructor() {
+    // 回前台立即补发一次 ping：后台节流可能已让 lastPongAt 落后，加速判活
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.ws?.readyState === WebSocket.OPEN) {
+        this.lastPongAt = Date.now()
+        this.send('ping', {})
+      }
+    })
+  }
+
+  /** 主动关闭（离开房间时调用），不再自动重连。
+   * 4.4+：关闭前先发显式 leave——服务端只认它为「退出房间」，
+   * 其余断开一律按掉线处理（切标签页不再被判离房） */
   close(): void {
     this.closedByUser = true
     this.stopHeartbeat()
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
+    }
+    if (this.ws?.readyState === WebSocket.OPEN && this.playerName) {
+      try {
+        this.ws.send(JSON.stringify({ type: 'leave', payload: {} }))
+      } catch {
+        // 发不出就直接断（服务端按掉线处理，语义不受影响）
+      }
     }
     this.ws?.close()
     this.ws = null

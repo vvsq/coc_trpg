@@ -9,7 +9,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
-import { getRoomHistory, getRoomState } from '@/api/rooms'
+import { getRoomHistory, getRoomState, joinRoom } from '@/api/rooms'
 import type { HistoryMessage } from '@/api/rooms'
 import { wsClient } from '@/api/ws'
 import type {
@@ -49,6 +49,22 @@ export const useRoomStore = defineStore('room', () => {
   /** 各成员角色卡状态快照（status_changed 广播驱动，按 player_name 索引）；
    * 展示时优先于卡面值，无快照的成员回退各自拉到的卡 */
   const cardStates = ref<Record<string, CardStateSnapshot>>({})
+
+  // 4.4+：关网页/刷新时 WS 帧发不出去，用 sendBeacon 显式告知「离开房间」。
+  // 服务端只认显式 leave（WS leave 消息 / 本 beacon）为退出，其余断开按掉线
+  // 处理——切标签页、后台节流、网络抖动都不会再把人判为退出。
+  let leaveBeaconBound = false
+  function bindLeaveBeacon(): void {
+    if (leaveBeaconBound) return
+    leaveBeaconBound = true
+    window.addEventListener('pagehide', () => {
+      if (!roomId.value || !playerName.value) return
+      const blob = new Blob([JSON.stringify({ player_name: playerName.value })], {
+        type: 'application/json',
+      })
+      navigator.sendBeacon(`/api/rooms/${roomId.value}/leave`, blob)
+    })
+  }
   /** 当前场景标题栏（scene_changed 广播 + GET /rooms/{id} 恢复） */
   const scene = ref<{ scene_title: string; scene_desc: string } | null>(null)
   // ---------- 4.1 协同建议 / 4.2 全自动主持 ----------
@@ -370,7 +386,13 @@ export const useRoomStore = defineStore('room', () => {
     roomId.value = id
     playerName.value = name
     cardId.value = cid
+    bindLeaveBeacon()
     localStorage.setItem(roomKey(id), JSON.stringify({ playerName: name, cardId: cid }))
+    // 幂等补行（4.4+）：显式 leave（含刷新页面的 pagehide beacon）会删花名册行，
+    // 而 WS join 不建行——这里按"行在则幂等返回、删了则带 card_id 重建"补齐，
+    // 修复"刷新页面后被 beacon 判离房、身份恢复后花名册缺行"的回归。
+    // 解散后的房间 404 静默吞掉（此时页面马上会被 room_dissolved/守卫带走）。
+    void joinRoom(id, name, cid).catch(() => {})
     wsClient.connect(id, name, handleEnvelope, (ok) => {
       const was = connected.value
       connected.value = ok
