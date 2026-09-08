@@ -1,0 +1,41 @@
+# ==== 密钥与本地配置（LLM api_key 仅存本地）====
+.env
+.env.*
+!.env.example
+backend/.env
+project/backend/.env
+
+# ==== Python ====
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.db
+
+# ==== Node / 前端 ====
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+test-results/
+playwright-report/
+__screenshots__/
+*.tsbuildinfo
+.eslintcache
+*.timestamp-*-*.mjs
+
+# ==== 日志与运行时数据 ====
+*.log
+uvicorn.err
+project/backend/data/
+
+# ==== 工具产物 / 编辑器 / 系统 ====
+.ai-memory/
+.codebuddy/
+gui-test-screenshots/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+.DS_Store
