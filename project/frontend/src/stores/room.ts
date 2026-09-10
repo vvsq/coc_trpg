@@ -22,7 +22,9 @@ import type {
   CheckRequestPayload,
   KpStyleChangedPayload,
   KpStyleRef,
+  ModuleChangedPayload,
   RollResultPayload,
+  RoomModuleRef,
   RoomStatePayload,
   SceneChangedPayload,
   StatusChangedPayload,
@@ -78,8 +80,16 @@ export const useRoomStore = defineStore('room', () => {
   const keeperPending = ref(false)
   /** 4.4：房间当前 KP 风格（详情/state/切换广播三路驱动，回显不做本地先改） */
   const kpStyle = ref<KpStyleRef | null>(null)
+  /** 5.4：房间挂载的模组（详情接口初次回显 + module_changed 广播更新）；null = 未挂载 */
+  const roomModule = ref<RoomModuleRef | null>(null)
   /** 4.3+ 检定下放：已结算的请求 id 集合（roll_result 带 request_id 或历史回放标记） */
   const fulfilledRequests = ref<Set<string>>(new Set())
+
+  /** 5.4：用 REST 详情里的模组字段做初次回显（值来自服务端，不是本地乐观更新）；
+   * 之后的变更一律由 module_changed 广播驱动。 */
+  function syncRoomModule(current: RoomModuleRef | null): void {
+    roomModule.value = current
+  }
 
   function markFulfilled(requestId: string): void {
     if (!fulfilledRequests.value.has(requestId)) {
@@ -220,6 +230,18 @@ export const useRoomStore = defineStore('room', () => {
       narrativeMsgs.value.push({
         sender: 'system',
         text: `KP ${p.operator} 将 KP 风格切换为「${p.style_name}」`,
+        ts: msg.ts,
+        channel: 'system',
+      })
+    } else if (msg.type === 'module_changed') {
+      // 5.4：KP 挂载/解绑模组全员广播——回显 + 系统行（后端 sys 消息已落库）
+      const p = msg.payload as ModuleChangedPayload
+      roomModule.value = p.module
+      narrativeMsgs.value.push({
+        sender: 'system',
+        text: p.module
+          ? `KP ${p.operator} 将剧情骨架切换为模组「${p.module.module_name}」`
+          : '剧情骨架已解绑，回退默认方案',
         ts: msg.ts,
         channel: 'system',
       })
@@ -375,6 +397,7 @@ export const useRoomStore = defineStore('room', () => {
       cardStates.value = {}
       scene.value = null
       kpStyle.value = null
+      roomModule.value = null
       // 4.1：建议是 KP 屏内的会话态，换房不带走（agent_mode 由详情接口/广播回填）
       lastSuggestions.value = null
       suggestionsPending.value = false
@@ -456,6 +479,7 @@ export const useRoomStore = defineStore('room', () => {
     cardStates.value = {}
     scene.value = null
     kpStyle.value = null
+    roomModule.value = null
     lastSuggestions.value = null
     suggestionsPending.value = false
     keeperPending.value = false
@@ -477,11 +501,13 @@ export const useRoomStore = defineStore('room', () => {
     myRole,
     agentMode,
     kpStyle,
+    roomModule,
     lastSuggestions,
     suggestionsPending,
     keeperPending,
     fulfilledRequests,
     markFulfilled,
+    syncRoomModule,
     enterRoom,
     peekIdentity,
     restoreIdentity,

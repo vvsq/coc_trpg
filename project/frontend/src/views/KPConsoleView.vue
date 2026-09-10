@@ -33,6 +33,7 @@ import ChatStream from '@/components/ChatStream.vue'
 import SkillCheckPanel from '@/components/SkillCheckPanel.vue'
 import AiSuggestionPanel from '@/components/AiSuggestionPanel.vue'
 import KpStylePanel from '@/components/KpStylePanel.vue'
+import ModuleSelectPanel from '@/components/ModuleSelectPanel.vue'
 import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
 import { eraLabel, skillValue, type Investigator, type Skill } from '@/types/investigator'
 import type { WsMember } from '@/types/ws'
@@ -632,6 +633,12 @@ onUnmounted(() => {
         <div class="panel-card">
           <h3 class="panel-title">KP 风格</h3>
           <KpStylePanel />
+        </div>
+
+        <!-- 模组骨架（5.4：一个房间挂 1 个模组，未挂载回退默认骨架） -->
+        <div class="panel-card">
+          <h3 class="panel-title">模组骨架</h3>
+          <ModuleSelectPanel />
         </div>
 
         <!-- LLM 设置（4.1+：最小 KP 设置面板，写 .env 全局生效；DB 入库留 4.4） -->

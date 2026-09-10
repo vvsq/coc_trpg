@@ -8,9 +8,15 @@ LLM_MODEL=mock 即启用（settings.mock_mode）：get_client() 返回本客户�
 4.2：chat_with_tools 按消息状态脚本化——末条消息是工具结果时返回四段
 JSON 终稿，否则返回一次 roll_check 工具调用，让全自动主持全流程在
 mock 模式下也能演示（探索→检定→叙事）。
+
+5.2：chat() 认出模组抽取提示词时改吐一份合法的结构化模组 JSON，
+让「上传→解析→模组库」链路在无 key 环境下同样可演示。
 """
 import asyncio
 import json
+
+# 与 app.agent.module_parser.EXTRACT_PROTOCOL 对齐的识别标记
+_MODULE_MARKER = '结构化抽取器'
 
 
 def _extract_latest_action(messages: list[dict]) -> str:
@@ -46,6 +52,49 @@ def _suggestions_payload(snippet: str) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _module_payload(messages: list[dict]) -> str:
+    """模组结构化抽取的演示产物：结构合法、字段齐全，供模组库 UI 演示。"""
+    source = ' '.join(m.get('content', '') or '' for m in messages)
+    snippet = source.split('【模组原文】')[-1].strip()[:40] or '当前模组'
+    payload = {
+        'title': '（演示）模组骨架',
+        'background': f'（演示）依据原文开头「{snippet}」生成的背景概述，'
+                      '用于验证模组库页面的结构化展示与房间挂载链路。',
+        'tone': '（演示）克制恐怖，重氛围轻战斗',
+        'hook': '（演示）一封来历不明的邀请把调查员引向现场。',
+        'acts': [
+            {'order': 1, 'title': '第一幕', 'summary': '（演示）调查员抵达现场并接触关键 NPC。',
+             'public_goal': '弄清发生了什么', 'keeper_goal': '让玩家先看见异常再看见源头',
+             'key_clues': ['现场的第一处异常', 'NPC 的闪烁其词']},
+            {'order': 2, 'title': '第二幕', 'summary': '（演示）真相浮出水面，威胁时钟开始收紧。',
+             'public_goal': '阻止事态恶化', 'keeper_goal': '把线索指向守秘真相',
+             'key_clues': ['被刻意隐藏的记录']},
+        ],
+        'npcs': [{
+            'name': '（演示）关键 NPC',
+            'public_identity': '本地知情人',
+            'hidden_motive': '（演示·仅 KP）试图掩盖自己与事件的关联',
+            'player_clues': ['说话前后矛盾'],
+            'misdirection': '把嫌疑引向外来者',
+            'pressed_reaction': '被逼问时改用沉默与转移话题',
+            'exit_plan': '若被识破则连夜离开，留下一封半真半假的信',
+            'stats': {},
+        }],
+        'clues': [
+            {'code': '', 'content': '（演示）现场遗留的关键物证', 'visibility': 'public',
+             'points_to': '事件并非意外'},
+            {'code': '', 'content': '（演示）只有 KP 知道的时间线矛盾', 'visibility': 'keeper',
+             'points_to': '真凶的身份'},
+        ],
+        'clocks': [{'name': '（演示）威胁逼近', 'target': 4, 'note': '走满则事态不可逆'}],
+        'endings': [{'name': '（演示）终结', 'condition': '威胁时钟走满且调查员未阻止'}],
+        'key_checks': [{'skill': '侦查', 'difficulty': 'standard', 'scene': '第一幕',
+                        'stake': '失败则错过关键细节'}],
+        'warnings': ['（演示）本结果为 mock 客户端产出，非真实解析'],
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
 class MockLLMClient:
     """LLMClient 的零网络替身：chat / chat_with_tools / ping / list_models 同签名。"""
 
@@ -61,6 +110,8 @@ class MockLLMClient:
         json_mode: bool = False,
     ) -> str:
         await asyncio.sleep(0.8)  # 模拟生成延迟，让前端「生成中」骨架可见
+        if any(_MODULE_MARKER in (m.get('content') or '') for m in messages):
+            return _module_payload(messages)
         return _suggestions_payload(_extract_latest_action(messages))
 
     async def chat_with_tools(

@@ -11,6 +11,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 import pytest
 
 import app.models  # noqa: F401  确保全部 table=True 模型注册进 metadata
+import app.agent.module_context as module_context
 import app.agent.suggest as suggest_mod
 from app.agent.suggest import suggestion_engine
 from app.db import get_session
@@ -336,12 +337,12 @@ def test_engine_uses_newest_player_action_as_latest(tmp_path, monkeypatch):
 
 
 def test_engine_injects_scenario_brief(tmp_path, monkeypatch):
-    """L3 模组骨架：data/scenario_brief.txt 存在即注入提示词（4.1 临时方案）。"""
+    """L3 模组骨架：房间未挂模组时回退 data/scenario_brief.txt（5.4：搬到 module_context）。"""
     engine = _make_env(tmp_path, monkeypatch)
     room_id = _seed_room(engine)
     brief = tmp_path / 'scenario_brief.txt'
     brief.write_text('【模组】测试模组骨架：时间循环在8月22日。', encoding='utf-8')
-    monkeypatch.setattr(suggest_mod, '_SCENARIO_PATH', brief)
+    monkeypatch.setattr(module_context, '_SCENARIO_PATH', brief)
     fake = FakeClient(reply=GOOD_REPLY)
     monkeypatch.setattr(suggest_mod, 'get_client', lambda: fake)
     monkeypatch.setattr(suggest_mod, 'get_light_client', lambda: fake)

@@ -4,6 +4,7 @@ import type {
   CardStateSnapshot,
   RoomCreated,
   RoomListItem,
+  RoomModuleRef,
   RollResultPayload,
   StatusChangedPayload,
   WsMember,
@@ -34,7 +35,8 @@ export async function listRooms(): Promise<RoomListItem[]> {
 }
 
 /** 房间详情（轻量）：退出房间时判断是否提示 KP 解散用；scene 供进房恢复场景标题栏；
- * agent_mode（4.1）供 KP 控制台 AI 建议面板回显；style（4.4）供 KP 风格面板回显 */
+ * agent_mode（4.1）供 KP 控制台 AI 建议面板回显；style（4.4）供 KP 风格面板回显；
+ * module（5.4）供模组选择面板回显，null = 未挂载（用默认骨架） */
 export interface RoomDetail {
   room_id: string
   name: string
@@ -43,6 +45,7 @@ export interface RoomDetail {
   scene: { scene_title: string; scene_desc: string }
   agent_mode: AgentMode
   style: { style_id: string; style_name: string }
+  module: RoomModuleRef | null
 }
 
 export async function getRoom(roomId: string): Promise<RoomDetail> {
@@ -207,5 +210,19 @@ export async function rollCheckRequest(
   return client.post<RollResultPayload, RollResultPayload>(
     `/rooms/${roomId}/check-requests/${requestId}/roll`,
     { player_name: playerName },
+  )
+}
+
+// ==================== 阶段 5：房间挂载模组 ====================
+
+/** KP 挂载 / 解绑房间模组（moduleId=null 即解绑）；回显由 module_changed 广播驱动 */
+export async function setRoomModule(
+  roomId: string,
+  kpName: string,
+  moduleId: number | null,
+): Promise<{ module: RoomModuleRef | null; unchanged?: boolean }> {
+  return client.put<{ module: RoomModuleRef | null }, { module: RoomModuleRef | null }>(
+    `/rooms/${roomId}/module`,
+    { kp_name: kpName, module_id: moduleId },
   )
 }

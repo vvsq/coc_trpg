@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime
-from pathlib import Path
 
 from sqlmodel import Session, select
 
@@ -31,6 +30,7 @@ from app.agent.assembler import (
     parse_suggestions,
 )
 from app.agent.kp_styles import get_style, render_style_directive
+from app.agent.module_context import load_module_brief
 from app.db import engine
 from app.llm.config import get_settings
 from app.llm.provider import LLMUnavailableError, get_client, get_light_client
@@ -46,19 +46,6 @@ AUTO_DEBOUNCE_SECONDS = 2.5
 
 # 4.4：建议生成不传 max_tokens（DeepSeek-v4 系设预算会触发异常长思考，
 # 见 provider._complete 注释）；轻任务模型（qwen3.8-flash）默认思考已关，规模可控
-
-# L3 模组骨架注入（4.1 临时方案）：backend/data/scenario_brief.txt 存在即整体注入。
-# 阶段 5 模组解析落地后由 scenario_state/模组库按房间替换，此处仅跑通 L3 链路。
-_SCENARIO_PATH = Path(__file__).resolve().parents[2] / 'data' / 'scenario_brief.txt'
-_SCENARIO_MAX_CHARS = 4000
-
-
-def _load_scenario_brief() -> str | None:
-    try:
-        text = _SCENARIO_PATH.read_text(encoding='utf-8').strip()
-    except OSError:
-        return None
-    return text[:_SCENARIO_MAX_CHARS] or None
 
 
 class SuggestionEngine:
@@ -217,7 +204,8 @@ class SuggestionEngine:
                 latest_action=latest_action,
                 focus=focus,
                 style=render_style_directive(get_style(session, room.style_id)),  # L2（4.4）
-                scenario=_load_scenario_brief(),
+                # L3（5.4）：房间挂载的模组骨架；未挂载时回退 scenario_brief.txt
+                scenario=load_module_brief(session, room_id),
             ), True
 
     async def _handle_failure(

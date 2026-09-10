@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.agent.kp_styles import style_echo
+from app.agent.module_context import module_echo
 from app.db import get_session
 from app.models import Card, Message, Room, RoomMember
 from app.ws.manager import build_envelope, manager
@@ -169,6 +170,8 @@ def get_room(room_id: str, session: Session = Depends(get_session)):
         'agent_mode': room.agent_mode,
         # KP 风格（4.4）：id + 名称（面板回显用）
         'style': style_echo(session, room),
+        # 模组骨架（5.4）：id + 名称 + 解析状态；None = 未挂载（用默认骨架）
+        'module': module_echo(session, room),
     }
 
 

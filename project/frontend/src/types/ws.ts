@@ -176,6 +176,21 @@ export interface KpStyleChangedPayload extends KpStyleRef {
   operator: string
 }
 
+// ==================== 阶段 5：房间挂载模组（goal §7） ====================
+
+/** 房间当前模组的展示摘要（详情接口 / 切换广播同构）；未挂载时接口返回 null */
+export interface RoomModuleRef {
+  module_id: number
+  module_name: string
+  parse_status: string
+}
+
+/** module_changed 信封 payload：module 为 null 表示解绑（回退默认骨架） */
+export interface ModuleChangedPayload {
+  module: RoomModuleRef | null
+  operator: string
+}
+
 // ==================== 阶段 4.1：协同建议模式（决策 D10） ====================
 
 /** Agent 模式：manual 纯人工 / collab 协同建议 / auto 全自动主持（4.2） */

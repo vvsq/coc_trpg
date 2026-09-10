@@ -8,6 +8,7 @@
   - room_member  房间成员（KP 与玩家同表，role 区分）
   - message      聊天消息（channel: narrative 剧情流 / ooc 闲聊流 / system 系统）
   - save_game    KP 存档（阶段 3.4：成员花名册 + 各卡 card_data + 场景的 JSON 快照）
+  - module_scenario 模组库（阶段 5：提取全文 + LLM 结构化 JSON）
 
 约定：表结构稳定前不做增量迁移。任何结构变更 = 删 data/coc.db 重跑
 scripts/init_db.py（--force 自动删旧库）。阶段 4 结束后再引入 Alembic。
@@ -17,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, Text
 from sqlmodel import Field, SQLModel
 
 
@@ -124,6 +125,9 @@ class Room(SQLModel, table=True):
     agent_mode: str = Field(default='manual')
     # KP 风格（阶段 4.4，§6.2）：内置 id（balanced/immersive/teaching）或 kp_style 表的自定义 id
     style_id: str = Field(default='balanced')
+    # 挂载的模组（阶段 5）：为空 = 回退 data/scenario_brief.txt 兜底骨架；
+    # 一个房间同时只挂 1 个（用户决策 2026-09-10），换绑即改本列
+    module_id: int | None = Field(default=None, foreign_key='module_scenario.id')
     created_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -329,4 +333,37 @@ class LlmUsage(SQLModel, table=True):
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+
+# ==================== 阶段 5：模组库（goal §7 阶段 5 / §5.2 早规划的 module_scenario） ====================
+
+class ModuleScenario(SQLModel, table=True):
+    """模组（剧本）库。上传 → 提取纯文本 → KP 手动触发 LLM 结构化解析。
+
+    生命周期（parse_status）：pending 仅提取待解析 / parsing 解析中 /
+    ready 已就绪可挂载 / failed 解析失败（parse_error 存原因，可重试）。
+
+    raw_text 是提取出的全文（原文页签展示 + 重新解析的输入，因此必须留存）；
+    parsed 是结构化 JSON（见 app/agent/module_parser.py 的 schema 定义），
+    由 LLM 产出、可被 KP 人工修正（PUT /api/modules/{id}）。
+
+    parse_model 记录**本次解析实际使用的模型**——解析模型是每次手动解析时
+    可选参数（用户决策 2026-09-10），换模型重解析要能追溯。
+    """
+
+    __tablename__ = 'module_scenario'
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True, description='模组名（默认取上传文件名，可改）')
+    source_type: str = Field(default='txt', description='txt / pdf / docx')
+    source_filename: str = Field(default='', description='原始文件名（展示用）')
+    raw_text: str = Field(default='', sa_column=Column(Text, nullable=False),
+                          description='提取出的纯文本全文')
+    parsed: dict | None = Field(default=None, sa_column=Column(JSON),
+                                description='结构化剧情 JSON（LLM 产出 + 人工修正）')
+    parse_status: str = Field(default='pending', index=True)
+    parse_error: str = Field(default='', description='失败原因（UI 直接展示）')
+    parse_model: str = Field(default='', description='本次解析所用模型')
+    parsed_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.now)
 

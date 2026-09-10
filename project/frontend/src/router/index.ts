@@ -43,6 +43,17 @@ const router = createRouter({
       path: '/cards/:id',
       name: 'card-detail',
       component: () => import('../views/CardDetailView.vue'),
+    },
+    {
+      // 阶段 5：模组库（上传 / 解析 / 校对），KP 台挂载房间的模组在这里管理
+      path: '/modules',
+      name: 'module-list',
+      component: () => import('../views/ModuleListView.vue'),
+    },
+    {
+      path: '/modules/:id',
+      name: 'module-detail',
+      component: () => import('../views/ModuleDetailView.vue'),
     }
   ],
 })

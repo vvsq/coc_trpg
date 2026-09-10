@@ -15,11 +15,11 @@
 - [ ] 阶段 2.5：建卡体验完善（推迟项清单，见 §7）
 - [x] 阶段 3：局域网真人团（★ MVP 核心：房间 / WS / 双聊天框 / KP 控制台 / 存档）——3.1~3.4 完成
 - [ ] 阶段 4：LLM 集成、Agent 配置与双模式主持（已拆分 4.1~4.4，见 §7，2026-09-06）——4.1 + 4.1+ 修订 + 4.2 + 4.3 + 4.4 完成（2026-09-08，阶段 4 全部完成）
-- [ ] 阶段 5：模组解析
+- [x] 阶段 5：模组解析（上传 TXT/PDF/DOCX → 手动选模型解析 → 模组库校对 → 房间挂载，2026-09-10）
 - [ ] 阶段 6：打磨、演示材料与部署（已瘦身，见 §7）
 
 **MVP 定义**：局域网内 1 个 KP + 2~4 个玩家，用浏览器开一局真人 CoC 团（建房 → 加入 → 双聊天框 → 掷骰 → KP 改状态 → 存档续玩）。
-**下一步动作**：阶段 5（模组解析）。阶段 4 已于 2026-09-08 全部完成（4.4：KP 风格系统 + llm_config 入库 + 轻任务分级路由 + Token 统计 + 4.3 遗留修复；浏览器双端实测验收线全通过，详见 §11）。
+**下一步动作**：阶段 6（打磨、演示材料与部署）。阶段 5 已于 2026-09-10 完成（模组库 + 结构化解析 + 房间挂载替换临时骨架，详见 §11）。
 
 ---
 
@@ -407,14 +407,15 @@ LLM 上下文由记忆模块**按需检索组装**，不把全文塞进 prompt�
 - [x] 存量库迁移脚本 scripts/migrate_44.py（room 补 style_id 列 + 新表 create_all，不动旧数据）
 - [x] **验收（阶段 4 总验收）**：✅ 切换风格叙事肉眼可见（沉浸=多感官高密度，教学=检定后明确讲解规则依据如「极难成功（8/80）」）；✅ 协同/全自动随时切换；✅ 全自动完整验收线实测打通：探索→检定下放（3 次 request_check 玩家本人投掷，服务端按卡查值）→暗骰（多次仅 KP 可见）→扣SAN（san_check 掷 11 困难成功损失 1，SAN 27→26 玩家血条实时）→线索登记（线索-01~06）→时钟推进（雾中看守逼近 1/4→4/4 走满触发看守现身），全程玩家端 DOM 断言零 keeper 泄漏；✅ 断网三连败自动回退 manual + 系统消息；✅ 协同建议由轻任务模型生成（payload model=qwen3.8-flash）；✅ Token 总账 UI 显示（52 次 / 460.2k 输入 / 68.8k 输出）
 
-### 阶段 5：模组解析（2 天）
+### 阶段 5：模组解析（2 天）✅ 已完成（2026-09-10）
 
-- [ ] 模组上传 API：支持 TXT / PDF / DOCX（Python 提取纯文本）
-- [ ] LLM 结构化抽取：分章节喂给 LLM，抽取→模组标题/背景/关键 NPC（名字/动机/数值）/ 剧情节点 / 线索 / 可选结局 / 关键检定，输出固定 JSON schema 存库
-- [ ] 模组库页面：列表 / 上传 / 查看结构化结果 / 删除
-- [ ] 全自动主持模式可选择一个已解析模组作为剧情骨架（注入系统提示词）
-- [ ] 规则库：理智损失表、疯狂症状表已**前移至 4.2**（san_check 依赖）；伤害表等其余高频规则随需补抽
-- [ ] **验收**：上传一个真实模组 PDF → 得到结构化剧情 JSON → 全自动模式按该模组开场并引用其中 NPC 与线索
+- [x] 模组上传 API：支持 TXT / PDF / DOCX（Python 提取纯文本）——`POST /api/modules`，DOCX 走标准库 zipfile+XML，PDF 走 pypdf，TXT/MD 带编码链回退
+- [x] LLM 结构化抽取：分块喂给 LLM，抽取→模组标题/背景/基调/开场钩子/分幕/NPC（六要素+数值）/线索/时钟/结局/关键检定/存疑项，固定 JSON schema 存库（`module_scenario.parsed`）
+- [x] 模组库页面：列表（状态徽章/来源格式/所用模型）/ 上传 / 查看（原文检索 + 结构化分块折叠 + 就地编辑校对）/ 删除
+- [x] 全自动主持模式可选择一个已解析模组作为剧情骨架（注入系统提示词）——协同 L3 与全自动 BP2 共用 `load_module_brief`，未挂载回退 `scenario_brief.txt`
+- [x] 规则库：理智损失表、疯狂症状表已**前移至 4.2**（san_check 依赖）；伤害表等其余高频规则随需补抽
+- [x] **验收**：真实模组（《雪盲》DOCX + 《八月二十二日》PDF）上传 → 结构化 JSON 通过 → 模组挂载后 AI 按模组 NPC/线索/时钟主持，玩家端零剧透（详见 §11 2026-09-10 两行）
+- 实施决策（用户 2026-09-10）：① 结构化结果**支持人工编辑修正关键字段**（PUT 局部覆盖）；② 一个房间同时只挂 1 个模组，可换绑/解绑；③ **手动点「开始解析」且可选解析模型**（上传只提取文本，不自动花钱）
 
 ### 阶段 6：打磨与演示（2 天；2026-09-06 瘦身：存读档 / 历史检索 / WS 心跳重连已随 3.4 完成，LLM 降级随 4.1 完成）
 
@@ -513,4 +514,6 @@ COC_project/
 | 2026-09-08 | **阶段 4.4 完成（阶段 4 收官，AI 代写）**：①KP 风格系统（§6.2）——kp_styles.py 四旋钮 JSON（内置沉浸/教学/平衡）+ kp_style 表自定义 + render_style_directive 渲染 L2（collab 拼 system / auto 放 BP2），REST kp-styles CRUD + PUT rooms/{id}/kp-style（sys 落库 + kp_style_changed 全员广播），前端 KpStylePanel.vue（下拉分组 + 自定义弹窗四旋钮编辑 + JSON 导入导出）；②llm_config 入库——config.py 重写为 DB 权威（单行 id=1，.env 仅首次 seed），save_settings + PUT /llm/config 扩展 light_* 三字段；③轻量分级路由——LLMSettings.light_ready/with_light_as_main + get_light_client()（suggest 生成/场景摘要走轻任务模型，留空=主模型）；④token 统计——usage.py 全局总账（LlmUsage 单行），provider._complete 记账，/llm/status 透出 + 设置面板展示；⑤遗留修复——roll_check 带 target 工具层硬拦截（schema 移除 target）、keeper 降级同步广播 suggestions 信封（前端清 keeperPending）；⑥provider 实测健壮性——DeepSeek-v4-pro 设 max_tokens 触发异常长思考（reasoning 吃满预算 content 空），改为调用方默认不传 max_tokens（实测不传时 3s/41 tokens 收敛）+ 翻倍重试兜底 + ping max_tokens 64；⑦存量迁移 scripts/migrate_44.py；测试 167→180 全绿（新增 test_kp_styles.py + 重写 test_llm_config.py/test_suggestions_api 配置段）；浏览器双端实测：风格切换广播/叙事差异肉眼可见（沉浸多感官 vs 教学讲规则依据）、协同建议轻任务路由（model=qwen3.8-flash）、全自动完整验收线（探索→3 次检定下放→暗骰→san_check 扣 SAN 27→26→线索-01~06→时钟 4/4 走满看守现身）全程玩家端零剧透、三连败自动降级、Token 总账 52 次/460k in/69k out | 决策变更（用户 2026-09-08）：llm_config=DB 权威 .env 做 seed；分级路由=轻量两档；token 统计=仅全局累计；测试用真实模型，因 DeepSeek pro 消耗过高（几轮 3 元）实测中途全量切千问（主 qwen3.8-max + 轻 qwen3.8-flash） |
 | 2026-09-08 | **人工测试四项反馈修复（AI 代写，浏览器双端实测通过）**：①collab 模式 KP 手动检定下放——tools.py 抽 create_check_request 公共函数（AI request_check 与 KP 手动共用）+ 新端点 POST /rooms/{id}/check-requests（kp.py，kp_name 鉴权）+ KPConsoleView「检定下放」面板（目标/技能/难度/缘由，sender 为 KP）；②LLM 运行时参数打通——PUT /llm/config 与设置面板补 timeout/retries/disable_thinking（修复 DB 权威后 30s 超时无法自救的配置悬空），实测 timeout=600 + qwen3.8-max 主/qwen3.8-flash 轻全链路建议生成成功；/llm/test 一并 ping 轻模型（light_latency_ms/light_error）；AiSuggestionPanel 增加「已思考 Ns」实时计时；③离开判定重构——WS 断开一律按掉线（不落库/不广播/不改成员列表），显式 leave 才算退出（退出按钮发 WS leave；关网页 pagehide→sendBeacon POST /rooms/{id}/leave 删花名册行+广播），成员列表/room_state 改用持久花名册全量，prune_stale_loop 改静默摘除+补 ws.close()（180s），前端心跳 PONG_TIMEOUT=90s+document.hidden 跳过判死+visibilitychange 补 ping；enterRoom 幂等调 REST joinRoom 补花名册行（beacon 删行后刷新自愈），join 对 KP 行缺失也补建；④死代码清理——删脚手架遗留 12 文件（TheWelcome/WelcomeItem/HelloWorld/icons×5/assets css×2+logo.svg/HelloWorld.spec/App.spec/e2e vue.spec），补生成缺失的 app/rules/data/madness_tables.json（extract_madness_tables.py，276 行），AboutView 占位页补实内容；pytest 180 全绿 + vue-tsc 通过 | 遗留记录：Card.owner 占位、narrative 频道全员可发（TODO）、validate_group_selection 未接线（有意为之）、L4 card_detail 恒 None（阶段 5 接模组库） |
 | 2026-09-10 | **模组临时接入点恢复**：重建 scenario_brief.example.txt（格式模板+使用说明：骨架 1000~2000 字、全局单文件、改动即生效无需重启）；依用户提供的《雪盲》（Sabrina 著，docx 于 COC_project/docs/测试模组/，人工资料不进本仓库）手写生成 backend/data/scenario_brief.txt（1776 字骨架：背景/核心异常/三幕剧情链/时钟/NPC/检定/三条线索路径/挽歌基调），已验证 _load_scenario_brief() 可加载——协同建议与全自动主持的 L3 层即接入该骨架 | 阶段 5 前的临时方案（4.1 遗留）：全局单文件、所有房间共享；模组库上线后按房间选择替换 |
+| 2026-09-10 | **阶段 5 完成（AI 代写）**：① **模组库数据层**——新建 `module_scenario` 表（raw_text 全文 / parsed 结构化 JSON / parse_status 状态机 / parse_model 追溯）+ `Room.module_id`，增量迁移 `scripts/migrate_45.py`（幂等，不动存量房间与存档）；② **上传与提取**——`app/api/modules.py`（列表/上传/详情/局部覆盖校对/删除）与 `app/agent/module_parser.py` 提取器：TXT/MD 编码链回退、DOCX 用标准库 zipfile 读 word/document.xml（venv 无 python-docx）、PDF 用 pypdf，含体积/空文本/扫描件错误分支；③ **结构化解析**——分块（≤4000 字、200 字重叠，≤3 块单次抽取，超则总览+逐块）→ map/reduce 合并（实体名归一 _canon_key 剥后缀与括号、技能同义归一 canon_skill、时长字段取长、acts 以总览为准、线索/检定去重合并、条目上限+截断警告）→ normalize_parsed 唯一形态；解析走 `spawn_background` + 轮询，进程内 `_PARSING` 集合做幂等与重启自愈，JSON 解析失败带原文重问一次；④ **手动解析 + 选模型**——`POST /modules/{id}/parse`（可传 model，留空=轻任务模型），上传不自动解析；⑤ **模组库前端**——`/modules` 列表（卡片网格/状态徽章）、`/modules/:id` 详情（解析面板+原文检索高亮+结构化分块就地编辑）、上传弹窗，均独立组件（不塞进 1100 行的 KPConsoleView）；⑥ **房间挂载与注入替换**——`PUT /rooms/{id}/module`（kp_name 403 + sys 消息 + module_changed 全员广播）+ `app/agent/module_context.py` 的 `load_module_brief` 同时接管协同 L3 与全自动 BP2（未挂载回退 scenario_brief.txt），渲染分【公开层】【仅KP】两层并按字段裁剪；模组守秘字段并入 `_keeper_markers`（补上"刚挂模组、线索还没登记"的防剧透盲区）；⑦ 测试 189→266 全绿（新增 test_module_extract/parser/modules_api/binding 四个文件）+ vue-tsc 通过；真实模型实测：《雪盲》DOCX 单次解析 42s（3 幕/5 NPC/6 线索/2 时钟/3 结局/4 检定，含 4 条存疑提示）、《八月二十二日》PDF 多块解析 193s（修合并前是 8 幕/7 时钟/17 结局/22 检定，修后 4 幕/2 时钟/4 结局/15 检定） | 用户决策：结构化结果可人工校对、一房一模组、手动选模型解析；浏览器实测见下一行 |
+| 2026-09-10 | **阶段 5 浏览器端到端实测（chrome-devtools，AI 代写）**：① **上传**——`/modules` 拖拽弹窗上传 TXT（9950 字提取成功，自动跳详情页）；② **手动解析 + 选模型**——模型下拉实时探测出 52 个可用模型，显式选 `qwen3.8-max` 后点「开始解析」，状态机 pending→parsing（按钮禁用 + 已耗时计时）→ready；解析质量：3 幕（专家/旅人/挚友）、9 NPC、14 线索、3 时钟、3 结局、1 检定 + 8 条存疑提示，全字段与原文一致，`qwen3.8-max` 明显比 flash 更细（NPC 9 vs 5、线索 14 vs 6）；③ **房间挂载**——KP 台「模组骨架」面板换绑（辉质→雪盲），toast + 面板回显 + `module_changed` 广播系统行三处一致，注入链实测已切换（5138 字《雪盲》骨架，无 PDF 模组残留）；④ **协同模式**——建议文本用上了模组解析出的 **谢尔/英格堡、泪湖、金盏花** 三个要素，三条互不重复 + 检定提示，质量优；⑤ **全自动模式**——AI 一轮内发起 `request_check`（心理学·常规）**成功落地**（player 侧出现投掷按钮，P1 修复闭环）、公开叙事用到英格堡/合影/肩上霜，**玩家端零剧透**（检索不到 keeper 片段/兰莫丽芙家旧宅/寒灾时钟/仅KP 字样），keeper 笔记正确只进 KP 屏；⑥ **实测发现并修复**——`ModuleSelectPanel` 首次回显竞态：父视图 `KPConsoleView.onMounted` 是异步的（先 await getRoom 做 KP 守卫），子组件 onMounted 早于它执行时 `room.roomId` 仍为空串，`getRoom('')` 404 → 面板永久停在"未挂载"；改为 watch roomId（immediate，换房自动重载）后回显正常；⑦ 顺带实测到「删除被引用模组 → 自动解绑」：删掉正在挂载的模组后房间回退默认骨架，系统消息「挂载的模组已被删除，剧情骨架回退默认方案」落库 + 广播 | token 累计 64 次调用 / 27.9 万 input / 5.3 万 output；模组库最终留《雪盲》DOCX + 《八月二十二日》PDF 两份，房间 18408065 挂载《雪盲》 |
 | 2026-09-10 | **三模式浏览器实测后修复（AI 代写）**：① **工具 target 名不匹配（核心修复）**——真实现场「玩家昵称 ≠ 角色卡名」时，AI 会照抄【在场调查员】里的卡名当 target，request_check/san_check/update_status 全部报「不在房间内」，整轮检定下放落空。修法两层：提示词侧 keeper/suggest 的 investigators 补 `player_name`，assembler 抽出共用 `_investigator_line`（渲染「玩家昵称（职业｜角色名 X）」，BP3 与建议头部写明 target 必须填玩家昵称）；工具侧 `_load_member_card` 昵称查不到时按卡名反查兜底，并**归一成花名册昵称**返回与落库（check_request 的 payload.target 决定前端「谁能点投掷」）。② **存档列表鉴权补齐**——GET /rooms/{id}/saves 原漏 kp_name 校验（玩家可列存档名），改为 query 鉴权 403，前端 listSaves 透传。③ add_clue 的 keeper 回执「。，」标点修复（裁 content 尾标点 + 改「｜来源：」分隔）。测试 180→189 全绿 + vue-tsc 通过；真实模型回归（房间 18408065，玩家甲带卡 test）：全自动一轮 request_check 成功落地（target 归一为「玩家甲」），玩家点投掷 侦查 95→72 常规成功，AI 还自行回收了早前失败时记下的「伏笔#1 待办」 | 来源：三模式（纯人工/协同/全自动）浏览器实测报告；同批记录低危项：刷新页 pagehide→beacon leave 与重连 join 之间有 ~1s 花名册空缺窗口（enterRoom 幂等补行已兜底，仅竞态） |

@@ -32,7 +32,7 @@ from app.agent.assembler import (
     parse_auto_turn,
 )
 from app.agent.kp_styles import get_style, render_style_directive
-from app.agent.suggest import _load_scenario_brief
+from app.agent.module_context import load_module_brief, module_keeper_markers
 from app.agent.tools import (
     AI_KEEPER_NAME,
     TOOL_SCHEMAS,
@@ -96,7 +96,12 @@ def filter_final_visibility(final: dict, keeper_markers: list[str]) -> dict:
 
 
 def _keeper_markers(session: Session, room_id: str) -> list[str]:
-    """当前房间不得出现在公开叙事里的字符串清单（D8 过滤依据）。"""
+    """当前房间不得出现在公开叙事里的字符串清单（D8 过滤依据）。
+
+    5.4 起把**房间挂载模组**的守秘字段（NPC 隐藏动机/结局条件/时钟后果/
+    仅 KP 线索）也纳入：模组刚挂上、线索还没经 add_clue 登记进库时，
+    只靠 clue/clock/npc 表会有过滤盲区。
+    """
     markers: list[str] = []
     for c in session.exec(select(Clue).where(Clue.room_id == room_id)).all():
         if c.visibility == 'keeper':
@@ -110,6 +115,9 @@ def _keeper_markers(session: Session, room_id: str) -> list[str]:
     for n in session.exec(select(Npc).where(Npc.room_id == room_id)).all():
         if n.hidden_motive and len(n.hidden_motive) >= 8:
             markers.append(n.hidden_motive)
+    for marker in module_keeper_markers(session, room_id):
+        if marker not in markers:
+            markers.append(marker)
     return markers
 
 
@@ -371,7 +379,8 @@ class AutoKeeper:
                 scene_title=room.scene_title,
                 scene_desc=room.scene_desc,
                 style=render_style_directive(get_style(session, room.style_id)),  # L2（4.4）
-                scenario=_load_scenario_brief(),
+                # BP2（5.4）：房间挂载的模组骨架；未挂载时回退 scenario_brief.txt
+                scenario=load_module_brief(session, room_id),
                 clues=clue_lines,
                 clocks=clock_lines,
                 threads=thread_lines,

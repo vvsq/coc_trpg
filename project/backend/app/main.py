@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import cards, dice, kp, rooms, suggestions
+from app.api import cards, dice, kp, modules, rooms, suggestions
 from app.ws import rooms as ws_rooms
 
 
@@ -34,5 +34,7 @@ app.include_router(rooms.router, prefix='/api')
 app.include_router(kp.router, prefix='/api')
 # 阶段 4.1：协同建议（模式切换 / 手动触发）+ LLM 状态与连通性
 app.include_router(suggestions.router, prefix='/api')
+# 阶段 5：模组库（上传 / 结构化解析 / 房间挂载前的资源管理）
+app.include_router(modules.router, prefix='/api')
 # WS 路由不带 /api 前缀：路径即 /ws/{room_id}
 app.include_router(ws_rooms.router)
