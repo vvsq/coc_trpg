@@ -162,8 +162,10 @@ export interface SaveMeta {
   created_at: string
 }
 
-export async function listSaves(roomId: string): Promise<SaveMeta[]> {
-  return client.get<SaveMeta[], SaveMeta[]>(`/rooms/${roomId}/saves`)
+export async function listSaves(roomId: string, kpName: string): Promise<SaveMeta[]> {
+  return client.get<SaveMeta[], SaveMeta[]>(`/rooms/${roomId}/saves`, {
+    params: { kp_name: kpName },
+  })
 }
 
 /** KP 读档：快照原子写回，返回 room_state 快照；界面由 room_state 广播驱动 */

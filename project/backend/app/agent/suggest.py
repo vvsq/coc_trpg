@@ -179,6 +179,8 @@ class SuggestionEngine:
                 derived = card_data.get('derived', {})
                 investigators.append({
                     'name': card.name,
+                    # 花名册昵称：工具 target 的唯一合法取值（4.4 实测修复，与 keeper 同源）
+                    'player_name': member.player_name,
                     'occupation': card.occupation,
                     'hp': card.current_hp,
                     'hp_max': int(derived.get('HP', 0)),

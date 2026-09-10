@@ -27,6 +27,7 @@ __screenshots__/
 
 # ==== 日志与运行时数据 ====
 *.log
+logs_*.txt
 uvicorn.err
 project/backend/data/
 

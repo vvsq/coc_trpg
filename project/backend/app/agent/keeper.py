@@ -301,7 +301,11 @@ class AutoKeeper:
                     if value > 0:
                         skills[label] = value
                 investigators.append({
+                    # player_name 是工具 target 的唯一合法取值（花名册名）；
+                    # name 只是角色卡名，两者不同时必须都喂给 LLM（4.4 实测修复：
+                    # 只给卡名会让 AI 拿「test」当 target，request_check 报「不在房间内」）
                     'name': data.get('name', card.name),
+                    'player_name': member.player_name,
                     'occupation': card.occupation,
                     'hp': card.current_hp,
                     'hp_max': int(derived.get('HP', 0)),

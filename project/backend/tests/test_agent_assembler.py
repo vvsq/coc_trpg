@@ -58,6 +58,41 @@ def test_session_window_truncated_to_last_n():
     assert user.count('[p') == SESSION_WINDOW_SIZE
 
 
+def test_investigator_line_shows_player_name_when_it_differs_from_card_name():
+    """4.4 实测修复：工具 target 只认玩家昵称（room_member.player_name）。
+
+    昵称 ≠ 卡名时必须两个都进提示词，且**昵称在括号外**（LLM 照抄那个当 target），
+    卡名放括号内做对照——否则 AI 会拿卡名当 target，request_check 直接报「不在房间内」。
+    """
+    ctx = _ctx(investigators=[
+        {'name': 'test', 'player_name': '玩家甲', 'occupation': '拳击手',
+         'hp': 8, 'hp_max': 12, 'san': 31, 'san_max': 35},
+    ])
+    user = build_suggestion_messages(ctx)[1]['content']
+    assert '玩家甲（拳击手｜角色名 test）' in user
+
+
+def test_investigator_line_falls_back_when_player_name_absent():
+    """旧上下文（无 player_name）渲染不炸，退化为只显示角色名（兼容既有调用）。"""
+    user = build_suggestion_messages(_ctx())[1]['content']
+    assert '张三（会计师）HP 9/12' in user
+    assert '角色名' not in user
+
+
+def test_auto_bp3_investigator_line_carries_player_name_and_target_hint():
+    """全自动 BP3 同一渲染 + 明确写出「target 必须填玩家昵称」。"""
+    from app.agent.assembler import AutoContext, build_auto_messages
+
+    ctx = AutoContext(investigators=[
+        {'name': 'test', 'player_name': '玩家甲', 'occupation': '拳击手',
+         'hp': 8, 'hp_max': 12, 'san': 31, 'san_max': 35, 'skills': {'侦查': 95}},
+    ])
+    turn = next(m['content'] for m in build_auto_messages(ctx) if m['content'].startswith('[本回合]'))
+    assert '玩家甲（拳击手｜角色名 test）' in turn
+    assert '技能：侦查 95' in turn
+    assert 'target 必须填它' in turn
+
+
 def test_optional_layers_skipped_when_none():
     """L2/L3/L4 与可空段落为 None/空时不留空标题（下层不重复上层内容）。"""
     bare = _ctx(

@@ -106,3 +106,23 @@ def test_join_room_roster_and_idempotent_rejoin(client):
         f'/api/rooms/{room_id}/join', json={'player_name': '陈默'}
     ).json()
     assert members_again == members
+
+
+# ---------- 存档列表鉴权（4.4 实测修复：原先漏了 kp_name 校验） ----------
+
+def test_list_saves_requires_kp_name(client):
+    room_id = _create_room(client)
+    client.post(f'/api/rooms/{room_id}/save', json={'kp_name': '老周', 'name': '第一章'})
+
+    # KP：正常拿到列表
+    ok = client.get(f'/api/rooms/{room_id}/saves', params={'kp_name': '老周'})
+    assert ok.status_code == 200 and [s['name'] for s in ok.json()] == ['第一章']
+
+    # 玩家 / 匿名：403（存档名也属 KP 信息）
+    assert client.get(f'/api/rooms/{room_id}/saves').status_code == 403
+    assert client.get(f'/api/rooms/{room_id}/saves', params={'kp_name': '陈默'}).status_code == 403
+
+
+def test_list_saves_room_not_found(client):
+    res = client.get('/api/rooms/NOPE0000/saves', params={'kp_name': '老周'})
+    assert res.status_code == 404

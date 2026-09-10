@@ -28,6 +28,31 @@ _TRAILING_COMMA_RE = re.compile(r',\s*(?=[}\]])')
 _VALID_DIFFICULTIES = {'standard', 'hard', 'extreme'}
 
 
+def _investigator_line(p: dict) -> str:
+    """【在场调查员】的单行渲染（协同/全自动共用，防两处格式漂移）。
+
+    4.4 实测修复：工具 target（request_check / san_check / update_status /
+    get_card）查的是 `room_member.player_name`（花名册昵称），不是角色卡名。
+    因此玩家昵称与角色名不同时两个都要喂给 LLM，且昵称必须放在括号外——
+    否则 AI 只会照抄卡名当 target，工具端报「「test」不在房间内」。
+    """
+    card_name = str(p.get('name') or '?')
+    player_name = str(p.get('player_name') or '').strip()
+    occupation = p.get('occupation', '?')
+    if player_name and player_name != card_name:
+        who = f'{player_name}（{occupation}｜角色名 {card_name}）'
+    else:
+        who = f'{card_name}（{occupation}）'
+    line = (f"- {who}"
+            f"HP {p.get('hp', '?')}/{p.get('hp_max', '?')}，"
+            f"SAN {p.get('san', '?')}/{p.get('san_max', '?')}")
+    skills = p.get('skills') or {}
+    if skills:
+        skill_text = '，'.join(f'{k} {v}' for k, v in list(skills.items())[:30])
+        line += f'\n  技能：{skill_text}'
+    return line
+
+
 @dataclass
 class SuggestionContext:
     """协同建议的输入上下文。字段均可缺省，组装时空段落自动跳过。"""
@@ -35,7 +60,8 @@ class SuggestionContext:
     room_name: str = ''
     scene_title: str = ''
     scene_desc: str = ''
-    # [{name, occupation, hp, hp_max, san, san_max}]，L4 的轻量版（只取存活必需项）
+    # [{name(角色名), player_name(花名册昵称), occupation, hp, hp_max, san, san_max}]
+    # L4 的轻量版（只取存活必需项）；player_name 缺失时渲染退化为只显示角色名
     investigators: list[dict] = field(default_factory=list)
     # L5 会话窗口：[{sender, role, text}]，时间升序（旧 → 新）
     session_window: list[dict] = field(default_factory=list)
@@ -62,12 +88,7 @@ def build_suggestion_messages(ctx: SuggestionContext) -> list[dict]:
     sections.append(f'【当前场景】{scene}')
 
     if ctx.investigators:
-        lines = [
-            f"- {p.get('name', '?')}（{p.get('occupation', '?')}）"
-            f"HP {p.get('hp', '?')}/{p.get('hp_max', '?')}，"
-            f"SAN {p.get('san', '?')}/{p.get('san_max', '?')}"
-            for p in ctx.investigators
-        ]
+        lines = [_investigator_line(p) for p in ctx.investigators]
         sections.append('【在场调查员】\n' + '\n'.join(lines))
     if ctx.card_detail:
         sections.append(f'【调查员背景】\n{ctx.card_detail}')
@@ -178,7 +199,8 @@ class AutoContext:
     npcs: list[str] = field(default_factory=list)      # NPC 档案行（六要素压缩）
     scene_summaries: list[str] = field(default_factory=list)  # 此前场景的公开摘要
     events: list[str] = field(default_factory=list)   # BP3：record_events 滚动登记（最近 10 条）
-    # L4：[{name, occupation, hp, hp_max, san, san_max, skills: {技能名: 值}}]（BP3）
+    # L4：[{name(角色名), player_name(花名册昵称), occupation, hp, hp_max, san,
+    #      san_max, skills: {技能名: 值}}]（BP3）；工具 target 只认 player_name
     investigators: list[dict] = field(default_factory=list)
     # L5 会话窗口：[{sender, role, text}]，时间升序（旧 → 新）
     session_window: list[dict] = field(default_factory=list)
@@ -237,18 +259,11 @@ def build_auto_messages(ctx: AutoContext) -> list[dict]:
         turn_sections.append(f'【已登记关键事件】（旧 → 新）\n{lines}')
 
     if ctx.investigators:
-        lines = []
-        for p in ctx.investigators:
-            base = (f"- {p.get('name', '?')}（{p.get('occupation', '?')}）"
-                    f"HP {p.get('hp', '?')}/{p.get('hp_max', '?')}，"
-                    f"SAN {p.get('san', '?')}/{p.get('san_max', '?')}")
-            skills = p.get('skills') or {}
-            if skills:
-                skill_text = '，'.join(f'{k} {v}' for k, v in list(skills.items())[:30])
-                base += f'\n  技能：{skill_text}'
-            lines.append(base)
-        turn_sections.append('【在场调查员】（roll_check 的 value 必须从这里取，拿不准用 get_card 查）\n'
-                             + '\n'.join(lines))
+        lines = [_investigator_line(p) for p in ctx.investigators]
+        turn_sections.append(
+            '【在场调查员】（括号外是**玩家昵称**——request_check / san_check / '
+            'update_status / get_card 的 target 必须填它，填角色卡名会被拒；'
+            '技能值拿不准先 get_card 查）\n' + '\n'.join(lines))
 
     if ctx.session_window:
         lines = []

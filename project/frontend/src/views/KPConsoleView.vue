@@ -343,7 +343,7 @@ async function onOpenLoadDialog(): Promise<void> {
   savesLoading.value = true
   selectedSaveId.value = null
   try {
-    saves.value = await listSaves(room.roomId)
+    saves.value = await listSaves(room.roomId, room.playerName)
   } catch {
     // 拦截器统一提示
   } finally {

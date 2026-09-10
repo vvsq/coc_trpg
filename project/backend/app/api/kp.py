@@ -5,7 +5,7 @@
                                   投影列 → message 落库（type=status，D9 溯源）→ 广播
   - PUT  /rooms/{id}/scene        KP 改场景标题栏：room 列 + sys 消息落库 → 广播
   - POST /rooms/{id}/save         KP 存档：花名册 + 各卡 card_data + 场景 → save_game 表
-  - GET  /rooms/{id}/saves        存档列表
+  - GET  /rooms/{id}/saves        存档列表（kp_name 走 query 鉴权）
   - POST /rooms/{id}/load/{sid}   KP 读档：快照原子写回 → 广播 room_state + 系统消息
 
 请求体一律携带 kp_name（与 room.kp_name 明文比对）；一切数值变更必带 reason。
@@ -242,11 +242,21 @@ def save_game(room_id: str, body: SaveRequest, session: Session = Depends(get_se
 
 
 @router.get('/rooms/{room_id}/saves')
-def list_saves(room_id: str, session: Session = Depends(get_session)):
-    """存档列表（仅名字与时间，不含快照体），读档弹窗数据源。"""
+def list_saves(
+    room_id: str,
+    kp_name: str = '',
+    session: Session = Depends(get_session),
+):
+    """存档列表（仅名字与时间，不含快照体），读档弹窗数据源。
+
+    kp_name 鉴权从 query 传（GET 无 body），与其余 KP 接口同款明文比对——
+    4.4 实测发现此接口漏了校验，玩家端可直接列出存档名。
+    """
     room = session.get(Room, room_id)
     if not room:
         raise HTTPException(status_code=404, detail='房间不存在')
+    if kp_name != room.kp_name:
+        raise HTTPException(status_code=403, detail='只有 KP 能查看存档列表')
     rows = session.exec(
         select(SaveGame).where(SaveGame.room_id == room_id).order_by(SaveGame.id.desc())
     ).all()

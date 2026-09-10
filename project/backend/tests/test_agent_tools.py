@@ -438,3 +438,89 @@ def test_roll_dice_uppercase_expr_ok(env):
     _, rid = env
     out = json.loads(asyncio.run(execute_tool('roll_dice', {'expr': '1D6', 'reason': 'x'}, rid)))
     assert 1 <= out['result'] <= 6  # 大写 D 合法（dice.roll 大小写不敏感）
+
+
+# ---------- target 归一化（4.4 实测修复：玩家昵称 ≠ 角色卡名） ----------
+#
+# 真实现场：玩家「玩家甲」带卡「test」。提示词里工具 target 要求填玩家昵称，
+# 但 LLM 会照抄【在场调查员】里的角色卡名，导致 request_check / san_check /
+# update_status 全部报「不在房间内」，整轮检定下放落空。修法两层：
+#   1) 提示词侧：_investigator_line 把玩家昵称放括号外、卡名放括号内；
+#   2) 工具侧：_load_member_card 昵称查不到时按卡名兜底，并归一成昵称回执。
+
+def _add_member_with_distinct_names(
+    engine, rid, *, player_name: str, card_name: str, skill_value: int = 95,
+) -> None:
+    """挂一名「昵称 ≠ 卡名」的成员（复现真实团最常见的命名方式）。"""
+    with Session(engine) as s:
+        card = Card(owner=player_name)
+        save_card(card, {
+            'name': card_name, 'occupation': '拳击手',
+            'attributes': {'STR': 65, 'INT': 75, 'POW': 35},
+            'derived': {'HP': 12, 'SAN': 35},
+            'state': {'current_hp': 12, 'current_sanity': 35},
+            'skills': [
+                {'name': '侦查', 'slot': 0, 'detail': '', 'base': 25,
+                 'occupation_points': skill_value - 25, 'interest_points': 0},
+            ],
+        })
+        s.add(card)
+        s.commit()
+        s.refresh(card)
+        s.add(RoomMember(room_id=rid, player_name=player_name, role='player', card_id=card.id))
+        s.commit()
+
+
+def test_request_check_card_name_falls_back_and_normalizes_to_player_name(env):
+    engine, rid = env
+    _add_member_with_distinct_names(engine, rid, player_name='玩家甲', card_name='test')
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': 'test', 'skill_name': '侦查',
+        'difficulty': 'standard', 'reason': '辨认钟摆背面的刻痕',
+    }, rid)))
+    assert out.get('status') == 'requested'
+    assert out['target'] == '玩家甲'  # 回执归一成花名册昵称（LLM 下一轮就能学到正确名字）
+    assert out['value'] == 95
+    # 落库行的 target 也必须归一：前端按 target === 我的昵称 判定「谁能投」
+    rows = [m for m in _msgs(engine, rid) if m.type == 'check_request']
+    assert rows and rows[-1].payload['target'] == '玩家甲'
+
+
+def test_request_check_unknown_target_error_hints_player_name(env):
+    """昵称与卡名都对不上时才报错，且文案引导 LLM 改用玩家昵称（D3 自我纠正）。"""
+    _, rid = env
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': '查无此人', 'skill_name': '侦查',
+        'difficulty': 'standard', 'reason': 'x',
+    }, rid)))
+    assert 'error' in out and '玩家昵称' in out['error']
+
+
+def test_update_status_and_san_check_accept_card_name(env, monkeypatch):
+    """同一处归一化覆盖 update_status / san_check（二者终归走 apply_status_change
+    的 player_name 查找，不归一就会同样报「目标成员不在房间内」）。"""
+    engine, rid = env
+    _add_member_with_distinct_names(engine, rid, player_name='玩家甲', card_name='test')
+    out = json.loads(asyncio.run(execute_tool('update_status', {
+        'target': 'test', 'hp': 5, 'reason': '被碎石划伤',
+    }, rid)))
+    assert out.get('target') == '玩家甲' and out['hp'] == 5
+
+    monkeypatch.setattr(tools_mod, 'coc7_check', _force_check('fail', 90))
+    monkeypatch.setattr(tools_mod.sanity, 'roll_loss', lambda *a, **k: 1)
+    scor = json.loads(asyncio.run(execute_tool('san_check', {
+        'target': 'test', 'loss_formula': '0/1D3', 'reason': '目睹白霜异象',
+    }, rid)))
+    assert scor.get('target') == '玩家甲'
+
+
+def test_add_clue_keeper_note_avoids_double_punctuation(env):
+    """回执摘要裁掉 content 尾部标点 + 改用「｜」（4.4 实测：原「，来源：」会撞成「。，」）。"""
+    engine, rid = env
+    json.loads(asyncio.run(execute_tool('add_clue', {
+        'content': '霜下的旧刻痕写着 Tårnsjø。', 'source': '钟摆背面', 'visibility': 'public',
+    }, rid)))
+    notes = [m.content for m in _msgs(engine, rid) if m.secret]
+    assert notes and 'Tårnsjø' in notes[-1]
+    assert '。，' not in notes[-1] and '。｜' not in notes[-1]
+    assert '｜来源：钟摆背面' in notes[-1]

@@ -112,7 +112,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             'parameters': {
                 'type': 'object',
                 'properties': {
-                    'target': {'type': 'string', 'description': '调查员名字（须在场且绑卡）'},
+                    'target': {'type': 'string',
+                               'description': '调查员名字：填**玩家昵称**（【在场调查员】里括号外的那个，'
+                                              '须在场且绑卡），不要填角色卡名'},
                     'skill_name': {'type': 'string', 'description': '技能名（服务端按其角色卡查值）'},
                     'difficulty': {'type': 'string', 'enum': ['standard', 'hard', 'extreme'],
                                    'description': '难度：常规/困难/极难'},
@@ -145,7 +147,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             'parameters': {
                 'type': 'object',
                 'properties': {
-                    'target': {'type': 'string', 'description': '调查员名字（须在场且绑卡）'},
+                    'target': {'type': 'string',
+                               'description': '调查员名字：填**玩家昵称**（【在场调查员】里括号外的那个，'
+                                              '须在场且绑卡），不要填角色卡名'},
                     'loss_formula': {'type': 'string', 'description': '损失公式，成功损失/失败损失，如 0/1D6、1/1D4+1'},
                     'reason': {'type': 'string', 'description': '触发理智检定的恐怖场景（必填）'},
                     'alone_or_all': {'type': 'boolean', 'description': '独处或全场同时发疯时 true（用总结症状），默认 false（即时症状）'},
@@ -177,7 +181,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             'parameters': {
                 'type': 'object',
                 'properties': {
-                    'target': {'type': 'string', 'description': '调查员名字（须在场且绑卡）'},
+                    'target': {'type': 'string',
+                               'description': '调查员名字：填**玩家昵称**（【在场调查员】里括号外的那个，'
+                                              '须在场且绑卡），不要填角色卡名'},
                     'hp': {'type': 'integer', 'minimum': 0, 'description': '变更后的 HP 绝对值'},
                     'sanity': {'type': 'integer', 'minimum': 0, 'description': '变更后的 SAN 绝对值'},
                     'reason': {'type': 'string', 'description': '变更原因（必填，如：受到步枪射击）'},
@@ -209,7 +215,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             'parameters': {
                 'type': 'object',
                 'properties': {
-                    'target': {'type': 'string', 'description': '调查员名字（须在场且绑卡）'},
+                    'target': {'type': 'string',
+                               'description': '调查员名字：填**玩家昵称**（【在场调查员】里括号外的那个，'
+                                              '须在场且绑卡），不要填角色卡名'},
                 },
                 'required': ['target'],
             },
@@ -382,19 +390,50 @@ def persist_keeper_note(session: Session, room_id: str, text: str) -> None:
 
 # ==================== 卡与成员读取 ====================
 
+def _find_member_by_card_name(session: Session, room_id: str, card_name: str) -> RoomMember | None:
+    """按角色卡名反查花名册成员（4.4 实测修复的兜底路径，见 _load_member_card）。"""
+    rows = session.exec(
+        select(RoomMember, Card)
+        .join(Card, RoomMember.card_id == Card.id)
+        .where(RoomMember.room_id == room_id, RoomMember.role == 'player')
+    ).all()
+    for member, card in rows:
+        name = (card.card_data or {}).get('name') or card.name
+        if name == card_name:
+            return member
+    return None
+
+
 def _load_member_card(session: Session, room_id: str, target: str) -> tuple[RoomMember, Card, dict]:
+    """按 target 取成员与其角色卡。
+
+    target 的规范形态是**玩家昵称**（room_member.player_name），这是提示词里
+    明确告诉 LLM 的取值。但 4.4 实测发现两种踩坑场景，故做兜底：
+
+      1) 玩家昵称 ≠ 角色卡名（如玩家「玩家甲」带卡「test」）时，LLM 会照抄
+         卡名当 target；
+      2) 昵称与卡名恰好一致时本就没有歧义。
+
+    因此昵称查不到时回退按卡名匹配，报错文案也点明该用玩家昵称（D3：错误
+    回喂给 LLM 让它自我纠正，而不是让整回合的检定下放直接失败）。
+    """
+    target = (target or '').strip()
+    if not target:
+        raise ValueError('需要指定调查员名字（玩家昵称）')
     member = session.exec(
         select(RoomMember).where(
             RoomMember.room_id == room_id, RoomMember.player_name == target,
         )
     ).first()
     if not member:
-        raise ValueError(f'「{target}」不在房间内')
+        member = _find_member_by_card_name(session, room_id, target)
+    if not member:
+        raise ValueError(f'「{target}」不在房间内（target 要用玩家昵称，不是角色卡名）')
     if not member.card_id:
-        raise ValueError(f'「{target}」未绑定角色卡')
+        raise ValueError(f'「{member.player_name}」未绑定角色卡')
     card = session.get(Card, member.card_id)
     if not card:
-        raise ValueError(f'「{target}」的角色卡不存在')
+        raise ValueError(f'「{member.player_name}」的角色卡不存在')
     return member, card, card.card_data or {}
 
 
@@ -542,7 +581,11 @@ async def create_check_request(
         raise ValueError('检定下放需要 target 与 skill_name')
     if difficulty not in ('standard', 'hard', 'extreme'):
         raise ValueError(f'难度必须是 standard/hard/extreme，收到 {difficulty!r}')
-    _, _, data = _load_member_card(session, room_id, target)
+    member, _, data = _load_member_card(session, room_id, target)
+    # 归一成花名册昵称：check_request 的 payload.target 决定「谁的投掷按钮可点」
+    # （前端按 target === 我的昵称 判定），也必须与工具回执一致，否则 LLM
+    # 会继续沿用卡名（4.4 实测：卡名≠昵称时玩家点不动按钮）。
+    target = member.player_name
     value = _skill_value(data, skill_name)
     if value is None:
         raise ValueError(
@@ -628,7 +671,8 @@ async def _tool_san_check(session: Session, room_id: str, args: dict) -> dict:
     if not target or not reason:
         raise ValueError('san_check 需要 target 与 reason')
 
-    _, card, data = _load_member_card(session, room_id, target)
+    member, card, data = _load_member_card(session, room_id, target)
+    target = member.player_name  # 归一成花名册昵称（4.4 实测修复，同 request_check）
     state = data.get('state', {})
     san_before = int(state.get('current_sanity', 0))
     int_value = int((data.get('attributes') or {}).get('INT', 50))
@@ -712,6 +756,8 @@ async def _tool_update_status(session: Session, room_id: str, args: dict) -> dic
     sanity_v = args.get('sanity')
     if hp is None and sanity_v is None:
         raise ValueError('hp 与 sanity 至少提供一个')
+    member, _, _ = _load_member_card(session, room_id, target)
+    target = member.player_name  # 归一成花名册昵称（4.4 实测修复，同 request_check）
     payload = await apply_status_change(
         session, room_id, target,
         hp=int(hp) if hp is not None else None,
@@ -788,9 +834,13 @@ async def _tool_add_clue(session: Session, room_id: str, args: dict) -> dict:
     session.add(clue)
     session.commit()
     session.refresh(clue)
-    persist_keeper_note(session, room_id,
-                        f'登记{clue.code}（{"公开" if visibility == "public" else "仅KP"}）：'
-                        f'{clue.content[:80]}' + (f'，来源：{clue.source}' if clue.source else ''))
+    # 4.4 实测修复：摘要前缀「，来源：」与 content 结尾的句号会撞成「。，」，
+    # 故裁掉 content 尾部标点，并改用「｜」分隔（标点无关的分隔符）
+    head = clue.content[:80].rstrip('。．.，,；;、 ')
+    note = f'登记{clue.code}（{"公开" if visibility == "public" else "仅KP"}）：{head}'
+    if clue.source:
+        note += f'｜来源：{clue.source}'
+    persist_keeper_note(session, room_id, note)
     return {'clue_id': clue.id, 'code': clue.code, 'visibility': visibility}
 
 
