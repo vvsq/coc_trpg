@@ -19,7 +19,7 @@ from sqlmodel import Session, select
 from app.agent.kp_styles import style_echo
 from app.agent.module_context import module_echo
 from app.db import get_session
-from app.models import Card, Message, Room, RoomMember
+from app.models import Card, Message, Room, RoomMember, RoomUsage
 from app.ws.manager import build_envelope, manager
 
 router = APIRouter()
@@ -212,6 +212,10 @@ async def dissolve_room(room_id: str, kp_name: str, session: Session = Depends(g
         session.delete(m)
     for msg in session.exec(select(Message).where(Message.room_id == room_id)).all():
         session.delete(msg)
+    # 本房间的 token 用量行一并清掉（用户反馈 #3：本场统计随房间生命周期）
+    usage_row = session.get(RoomUsage, room_id)
+    if usage_row is not None:
+        session.delete(usage_row)
     session.delete(room)
     session.commit()
 

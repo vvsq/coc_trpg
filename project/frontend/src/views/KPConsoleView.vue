@@ -26,16 +26,19 @@ import {
   type RoomStatusChange,
   type SaveMeta,
 } from '@/api/rooms'
-import { getCard } from '@/api/cards'
+import { getCard, listSkills } from '@/api/cards'
 import { useRoomStore } from '@/stores/room'
 import { useQuitRoom } from '@/composables/useQuitRoom'
+import { ROOM_SCOPE_ROUTE_NAMES } from '@/router'
 import ChatStream from '@/components/ChatStream.vue'
 import SkillCheckPanel from '@/components/SkillCheckPanel.vue'
 import AiSuggestionPanel from '@/components/AiSuggestionPanel.vue'
 import KpStylePanel from '@/components/KpStylePanel.vue'
 import ModuleSelectPanel from '@/components/ModuleSelectPanel.vue'
+import CardReviewPanel from '@/components/CardReviewPanel.vue'
 import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
 import { eraLabel, skillValue, type Investigator, type Skill } from '@/types/investigator'
+import type { SkillRow } from '@/types/skill'
 import type { WsMember } from '@/types/ws'
 
 const route = useRoute()
@@ -262,14 +265,53 @@ const crForm = reactive({
 })
 const crSubmitting = ref(false)
 
-/** 目标玩家的卡面技能选项（下拉数据源），label 带当前值 */
+// 标准技能清单（全技能底表）：卡上没加点的技能也能下放，值取基础值
+const allSkills = ref<SkillRow[]>([])
+
+/**
+ * 技能基础值：`base` 列优先；表达式型（闪避 = DEX/2、母语 = EDU）按目标卡属性解算。
+ * 与后端 `app/rules/skills.py` 同口径——前端只用于下拉展示，结算仍以服务端为准。
+ */
+function baseOf(row: SkillRow, card: Investigator | null): number | null {
+  if (row.base !== null && row.base !== undefined) return row.base
+  const expr = (row.base_expr || '').toUpperCase().replace(/\s/g, '')
+  const matched = /^([A-Z]{3})(?:\/(\d+))?$/.exec(expr)
+  if (!matched || !card) return null
+  const attrKey = String(matched[1])
+  const raw = (card.attributes as unknown as Record<string, number>)[attrKey]
+  if (typeof raw !== 'number') return null
+  const divisor = matched[2]
+  return divisor ? Math.floor(raw / Number(divisor)) : raw
+}
+
+/**
+ * 检定下放的可选技能：目标卡面技能（按卡值）+ 其余标准技能（按基础值）。
+ *
+ * 2026-09-10 修复（用户反馈 #4）：此前只列卡面技能，导致「让所有人投个聆听」
+ * 这类最常见的检定完全下放不了——而规则书里任何技能都可尝试，没加点就是基础值。
+ */
 const crSkillOptions = computed<{ label: string; name: string }[]>(() => {
-  const card = crForm.target ? cardMap.value[crForm.target] : null
-  if (!card) return []
-  return card.skills.map((s: Skill) => ({
-    label: `${s.name}${s.detail ? `（${s.detail}）` : ''} ${skillValue(s)}`,
-    name: s.name,
-  }))
+  const card = crForm.target ? (cardMap.value[crForm.target] ?? null) : null
+  const options: { label: string; name: string }[] = []
+  if (card) {
+    for (const s of card.skills) {
+      options.push({
+        label: `${s.name}${s.detail ? `（${s.detail}）` : ''} ${skillValue(s)}`,
+        name: s.name,
+      })
+    }
+  }
+  const known = new Set(options.map((o) => o.name))
+  for (const row of allSkills.value) {
+    if (known.has(row.name)) continue
+    const base = baseOf(row, card)
+    if (base === null || base <= 0) continue // 无基础值的技能（克苏鲁神话/自定义）不列
+    options.push({
+      label: `${row.name}${row.detail ? `（${row.detail}）` : ''} ${base}（基础值）`,
+      name: row.name,
+    })
+  }
+  return options
 })
 
 async function submitCheckRequest(): Promise<void> {
@@ -425,13 +467,22 @@ onMounted(async () => {
   room.kpStyle = { style_id: detail.style.style_id, style_name: detail.style.style_name }
   // 开团状态面板初值（读档/重开均以房间表为准）
   gameStatus.value = detail.status === 'playing' ? 'playing' : 'waiting'
+
+  // 标准技能底表：检定下放要能点名「玩家没加过点的技能」（按基础值结算）。
+  // 失败不阻塞控制台——卡面技能仍可正常下放，只是少一截选项。
+  try {
+    allSkills.value = await listSkills()
+  } catch {
+    // 拦截器已提示
+  }
 })
 
 onUnmounted(() => {
-  // 导航仍落在房间系路由（控制台⇄房间页互跳）时不拆连接，由目标视图接管；
-  // 只有真正离开房间系路由才断开
-  const toName = router.currentRoute.value.name
-  if (!didConnect || toName === 'room' || toName === 'kp-console') return
+  // 导航仍落在「房间工作区」路由（控制台⇄房间页互跳、以及模组库）时不拆连接，
+  // 由目标视图接管；只有真正离开才断开。模组库自 2026-09-10 起算工作区：
+  // KP 开团中途去看/换模组不该丢连接（用户反馈 #2）。
+  const toName = String(router.currentRoute.value.name ?? '')
+  if (!didConnect || ROOM_SCOPE_ROUTE_NAMES.has(toName)) return
   room.leaveRoom()
 })
 </script>
@@ -592,7 +643,7 @@ onUnmounted(() => {
           <el-select
             v-model="crForm.skill"
             class="tb-row"
-            placeholder="选择或输入技能名（按其卡查值）"
+            placeholder="选择技能（卡上没有的按基础值）"
             size="small"
             filterable
             allow-create
@@ -600,6 +651,10 @@ onUnmounted(() => {
           >
             <el-option v-for="o in crSkillOptions" :key="o.name" :label="o.label" :value="o.name" />
           </el-select>
+          <p class="tb-hint">
+            未加点的技能按技能表基础值结算（聆听 20、闪避 = 敏捷/2）；
+            也可直接输入技能名。
+          </p>
           <el-select v-model="crForm.difficulty" class="tb-row" size="small">
             <el-option label="常规" value="standard" />
             <el-option label="困难" value="hard" />
@@ -639,6 +694,12 @@ onUnmounted(() => {
         <div class="panel-card">
           <h3 class="panel-title">模组骨架</h3>
           <ModuleSelectPanel />
+        </div>
+
+        <!-- 检卡（用户反馈 #5）：挂好模组后检查玩家卡是否合规，仅建议不拦截 -->
+        <div class="panel-card">
+          <h3 class="panel-title">检查调查员卡</h3>
+          <CardReviewPanel />
         </div>
 
         <!-- LLM 设置（4.1+：最小 KP 设置面板，写 .env 全局生效；DB 入库留 4.4） -->
@@ -752,8 +813,13 @@ onUnmounted(() => {
       </template>
     </el-dialog>
 
-    <!-- LLM 设置对话框（4.1+）：base_url / key（掩码）/ 模型探测 + 手填兜底 -->
-    <LlmSettingsDialog v-model:visible="llmSettingsVisible" />
+    <!-- LLM 设置对话框（4.1+）：base_url / key（掩码）/ 模型探测 + 手填兜底；
+         传 roomId 后顶部多一行「本场消耗」（房间维度，仅 KP 可见） -->
+    <LlmSettingsDialog
+      v-model:visible="llmSettingsVisible"
+      :room-id="room.roomId"
+      :kp-name="room.playerName"
+    />
 
     <!-- 整卡抽屉 -->
     <el-drawer
@@ -1056,6 +1122,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.tb-hint {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8da2c0;
 }
 
 .delta-label {

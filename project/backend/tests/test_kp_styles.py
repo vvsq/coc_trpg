@@ -22,7 +22,7 @@ from app.agent.kp_styles import (
     validate_params,
 )
 from app.db import get_session
-from app.llm.usage import get_usage, record_usage
+from app.llm.usage import get_room_usage, get_usage, record_usage, usage_room
 from app.main import app
 from app.models import KpStyle, LlmUsage, Message, Room
 
@@ -175,9 +175,22 @@ def test_usage_record_and_read(env, monkeypatch):
     import app.llm.usage as usage_mod
     monkeypatch.setattr(usage_mod, 'engine', engine)
     record_usage('qwen-flash', 100, 30)
-    record_usage('deepseek-v4-pro', 500, 200)
+    record_usage('deepseek-v4-pro', 500, 200, cached_tokens=400)
     record_usage('qwen-flash', 0, 0)  # 全零不计
-    assert get_usage() == {'calls': 2, 'prompt_tokens': 600, 'completion_tokens': 230}
+    usage = get_usage()
+    assert usage['calls'] == 2
+    assert usage['prompt_tokens'] == 600 and usage['completion_tokens'] == 230
+    assert usage['cached_tokens'] == 400           # 命中前缀缓存的输入 token
+    assert usage['cache_hit_rate'] == round(400 / 600, 3)
+
+
+def test_usage_cached_tokens_clamped(env, monkeypatch):
+    """cached 是 prompt 的子集：供应商上报越界值（>prompt）时夹取，不污染账面。"""
+    engine, _ = env
+    import app.llm.usage as usage_mod
+    monkeypatch.setattr(usage_mod, 'engine', engine)
+    record_usage('m', 100, 10, cached_tokens=999)
+    assert get_usage()['cached_tokens'] == 100
 
 
 def test_usage_never_raises(tmp_path, monkeypatch):
@@ -186,4 +199,52 @@ def test_usage_never_raises(tmp_path, monkeypatch):
     broken = create_engine('sqlite://')  # 内存库但未建表 → 写入失败
     monkeypatch.setattr(usage_mod, 'engine', broken)
     record_usage('m', 10, 10)  # 不应抛异常
-    assert get_usage() == {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
+    assert get_usage() == {
+        'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0,
+        'cached_tokens': 0, 'cache_hit_rate': 0.0,
+    }
+
+
+# ---------- 按房间统计（2026-09-10 用户反馈 #3：一局团花了多少） ----------
+
+def test_room_usage_isolated_per_room(env, monkeypatch):
+    engine, rid = env
+    import app.llm.usage as usage_mod
+    monkeypatch.setattr(usage_mod, 'engine', engine)
+    record_usage('m', 100, 10, room_id=rid)
+    record_usage('m', 500, 50, cached_tokens=400, room_id='OTHER')
+
+    assert get_room_usage(rid)['prompt_tokens'] == 100
+    assert get_room_usage('OTHER')['cached_tokens'] == 400
+    assert get_room_usage('NOPE') == {
+        'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0,
+        'cached_tokens': 0, 'cache_hit_rate': 0.0,
+    }
+    # 全局总账照旧累加（两套口径并存）
+    assert get_usage()['prompt_tokens'] == 600 and get_usage()['calls'] == 2
+
+
+def test_usage_room_context_binds_nested_calls(env, monkeypatch):
+    """引擎层用 usage_room() 绑定房间，provider 记账无需感知 room_id。"""
+    engine, rid = env
+    import app.llm.usage as usage_mod
+    monkeypatch.setattr(usage_mod, 'engine', engine)
+    with usage_room(rid):
+        record_usage('m', 300, 30)       # 不传 room_id → 取上下文
+    assert get_room_usage(rid)['prompt_tokens'] == 300
+
+    record_usage('m', 7, 1)              # 上下文已退出 → 只记全局
+    assert get_room_usage(rid)['prompt_tokens'] == 300
+    assert get_usage()['prompt_tokens'] == 307
+
+
+def test_room_usage_api_requires_kp(env):
+    """本场消耗只给 KP 看（与存档列表同款 query 鉴权）。"""
+    _, rid = env
+    client = TestClient(app)
+    ok = client.get(f'/api/rooms/{rid}/usage', params={'kp_name': '老周'})
+    assert ok.status_code == 200 and ok.json()['room_id'] == rid
+    assert ok.json()['usage']['calls'] == 0
+    assert client.get(f'/api/rooms/{rid}/usage').status_code == 403
+    assert client.get(f'/api/rooms/{rid}/usage', params={'kp_name': '路人'}).status_code == 403
+    assert client.get('/api/rooms/NOPE/usage', params={'kp_name': '老周'}).status_code == 404

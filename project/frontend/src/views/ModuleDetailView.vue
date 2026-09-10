@@ -11,6 +11,7 @@ import { ElMessage } from 'element-plus'
 import { getModule, updateModule } from '@/api/modules'
 import ModuleParsePanel from '@/components/ModuleParsePanel.vue'
 import ModuleResultEditor from '@/components/ModuleResultEditor.vue'
+import { useRoomReturn } from '@/composables/useRoomReturn'
 import {
   EMPTY_PARSED,
   PARSE_STATUS_LABEL,
@@ -23,6 +24,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+// 顶栏返回：带来源房间时回 KP 控制台，否则回大厅（并负责离开工作区时拆连接）
+const { returnLabel, goBack, carryQuery } = useRoomReturn()
 
 const moduleId = Number(route.params.id)
 const detail = ref<ModuleDetail | null>(null)
@@ -84,7 +87,13 @@ function escapeHtml(raw: string): string {
   <main v-loading="loading" class="module-detail">
     <template v-if="detail">
       <div class="topbar">
-        <el-button text class="back" @click="router.push({ name: 'module-list' })">← 模组库</el-button>
+        <el-button
+          text
+          class="back"
+          @click="router.push({ name: 'module-list', query: carryQuery() })"
+        >
+          ← 模组库
+        </el-button>
         <div class="title-area">
           <el-input
             v-if="renaming"
@@ -103,6 +112,8 @@ function escapeHtml(raw: string): string {
         <div class="title-actions">
           <el-button v-if="renaming" size="small" type="primary" @click="saveName">保存名称</el-button>
           <el-button v-else size="small" @click="renaming = true">改名</el-button>
+          <!-- 从 KP 台进来的，解析完可以直接回控制台挂载（2026-09-10 用户反馈 #2） -->
+          <el-button size="small" type="primary" plain @click="goBack">{{ returnLabel }}</el-button>
         </div>
       </div>
 

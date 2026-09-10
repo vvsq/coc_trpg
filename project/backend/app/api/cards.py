@@ -22,6 +22,7 @@ from app.db import get_session
 from app.models import Card, OccupationRow, SkillRow, save_card
 from app.rules.coc7 import derive, validate_point_buy
 from app.rules.occupation import (
+    SKILL_MAX_AT_CREATION,
     SkillAllocation,
     build_budget,
     validate_allocation,
@@ -213,8 +214,11 @@ def create_card(payload: CardCreate, session: Session = Depends(get_session)):
                    + '、'.join('|'.join(c.options) for c in budget.pending),
         )
 
-    # 4) 技能点分配校验（超支/克苏鲁神话用兴趣点/职业点投非本职技能等）
-    problems = validate_allocation(occ, payload.attributes, allocations, payload.attribute_choices)
+    # 4) 技能点分配校验（超支/克苏鲁神话用兴趣点/职业点投非本职技能/单技能创建上限等）
+    problems = validate_allocation(
+        occ, payload.attributes, allocations, payload.attribute_choices,
+        max_skill_value=SKILL_MAX_AT_CREATION,
+    )
     if problems:
         raise HTTPException(status_code=400, detail='；'.join(problems))
 

@@ -34,7 +34,7 @@ from app.db import get_session
 from app.llm.config import get_settings, save_settings
 from app.llm.providers import PROVIDER_PRESETS
 from app.llm.provider import LLMUnavailableError, get_client
-from app.llm.usage import get_usage
+from app.llm.usage import get_room_usage, get_usage
 from app.models import Message, Room
 from app.tasks import spawn_background
 from app.ws.manager import build_envelope, manager
@@ -126,6 +126,58 @@ def _status_payload(s) -> dict:
             for key, preset in PROVIDER_PRESETS.items()
         ],
     }
+
+
+class CardReviewRequest(BaseModel):
+    """KP 审卡请求体（名字即身份，与其余 KP 接口同款轻量鉴权）。"""
+
+    kp_name: str = Field(min_length=1, max_length=50)
+
+
+@router.post('/rooms/{room_id}/card-review')
+async def review_cards(
+    room_id: str,
+    body: CardReviewRequest,
+    session: Session = Depends(get_session),
+):
+    """KP 检卡（2026-09-10 用户反馈 #5）：AI 逐卡列出不合理处与修改建议。
+
+    **只给建议，不拦截开团**（用户决策）。同步调用一次轻任务模型，耗时约 10~40s，
+    前端需放宽超时；LLM 不可用返回 503，未绑卡玩家返回空清单。
+    """
+    from app.agent.card_review import review_room_cards
+
+    room = session.get(Room, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail='房间不存在')
+    if body.kp_name != room.kp_name:
+        raise HTTPException(status_code=403, detail='只有 KP 能发起检卡')
+    try:
+        return await review_room_cards(room_id)
+    except LLMUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get('/rooms/{room_id}/usage')
+def room_usage(
+    room_id: str,
+    kp_name: str = '',
+    session: Session = Depends(get_session),
+):
+    """本房间（一场次）token 消耗，仅 KP 可见（2026-09-10 用户反馈 #3）。
+
+    与 GET /llm/status 的全局总账区分开：这里回答"这一局团花了多少"。
+    统计口径 = 建房到解散期间、绑定该 room_id 的所有 LLM 调用
+    （全自动轮次含工具循环、协同建议生成、场景摘要；模组解析等房间无关调用不计）。
+    """
+    room = session.get(Room, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail='房间不存在')
+    if kp_name != room.kp_name:
+        raise HTTPException(status_code=403, detail='只有 KP 能查看本房间消耗')
+    return {'room_id': room_id, 'usage': get_room_usage(room_id)}
 
 
 @router.put('/rooms/{room_id}/agent-mode')

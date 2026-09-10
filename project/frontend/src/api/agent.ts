@@ -39,11 +39,17 @@ export interface ProviderPreset {
   key_hint: string
 }
 
-/** Token 消耗全局总账（4.4） */
+/** Token 消耗全局总账（4.4；缓存命中观测 2026-09-10）
+ *
+ * prompt_tokens 是**名义输入**，其中命中前缀缓存的部分记在 cached_tokens
+ * （供应商按折扣计价），cache_hit_rate = cached / prompt（0~1）。
+ */
 export interface LlmUsage {
   calls: number
   prompt_tokens: number
   completion_tokens: number
+  cached_tokens?: number
+  cache_hit_rate?: number
 }
 
 /** GET /llm/status 响应（key 只回掩码，明文永不回传） */
@@ -116,8 +122,55 @@ export interface LlmTestResult {
   light_error?: string
 }
 
+/** 真实打一次 LLM。默认 axios 超时 10s 对慢模型偏紧（实测主模型 8.8s），
+ * 这里放宽到 90s——解析页的「检测模型」门禁依赖它，超时会误判不可用。 */
 export async function testLlm(): Promise<LlmTestResult> {
-  return client.post<LlmTestResult, LlmTestResult>('/llm/test', {})
+  return client.post<LlmTestResult, LlmTestResult>('/llm/test', {}, { timeout: 90000 })
+}
+
+/** 本房间（一场次）token 消耗，仅 KP 可查（2026-09-10 用户反馈 #3） */
+export interface RoomUsageResult {
+  room_id: string
+  usage: LlmUsage
+}
+
+export async function getRoomUsage(roomId: string, kpName: string): Promise<RoomUsageResult> {
+  return client.get<RoomUsageResult, RoomUsageResult>(`/rooms/${roomId}/usage`, {
+    params: { kp_name: kpName },
+  })
+}
+
+// ==================== 检卡（用户反馈 #5：AI 检查角色卡是否合理合规） ====================
+
+/** 单条问题；severity 两级：建议 / 明显不合理 */
+export interface CardReviewIssue {
+  severity: 'suggestion' | 'major'
+  title: string
+  detail: string
+  advice: string
+}
+
+export interface CardReviewPlayer {
+  player_name: string
+  overall: 'ok' | 'suggestion' | 'major'
+  issues: CardReviewIssue[]
+}
+
+export interface CardReviewResult {
+  players: CardReviewPlayer[]
+  model: string
+  module_mounted?: boolean
+  note?: string
+}
+
+/** 让 AI 逐卡检查（技能是否配得上背景、物品是否与模组冲突…）。
+ * 仅建议不拦截开团；服务端同步调一次 LLM，故单独放宽超时。 */
+export async function reviewRoomCards(roomId: string, kpName: string): Promise<CardReviewResult> {
+  return client.post<CardReviewResult, CardReviewResult>(
+    `/rooms/${roomId}/card-review`,
+    { kp_name: kpName },
+    { timeout: 180000 },
+  )
 }
 
 /** 类型再导出：面板组件从本模块取 SuggestionsPayload（REST/WS 同构） */

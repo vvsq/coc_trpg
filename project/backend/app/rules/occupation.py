@@ -93,6 +93,19 @@ def build_budget(
 # ---------------------------------------------------------------- 分配校验
 
 
+# 单技能创建上限（百分比）。
+#
+# **规则书未载明**：已通读《第七版守秘人规则书 Version2002》第三章「创建调查员」
+# 全节（3.1~3.6，含第三步「决定技能并分配技能点」正文与章末「快速参考：创建调查员」），
+# 只规定职业点/兴趣点预算、信用评级范围与未分配点数作废，**没有**技能创建上限这条；
+# 全库检索 `不得超过 / 上限 / 80% / 90%` 亦无关（6→7 版转换章节仅提过「KP 可以
+# 规定 75% 上限」）。故此处取 KP 裁定值 90（用户 2026-09-10 决策）。
+#
+# 需要更严格时改成 80 即可——校验逻辑与数值无关；母语=EDU 这类基础值本身已超过
+# 上限的技能不会被误报（见 validate_allocation 的判定条件）。
+SKILL_MAX_AT_CREATION = 90
+
+
 class SkillAllocation(BaseModel):
     """一次技能点的投入记录（建卡向导提交 / 存档里的分配结果）。
 
@@ -122,8 +135,9 @@ def validate_allocation(
 ) -> list[str]:
     """校验分配是否合法，返回问题列表（空列表 = 合法）。
 
-    max_skill_value：单技能创建上限（七版 80% 那条硬规则），
-    请先用 other/克苏鲁的呼唤第七版守秘人规则书.pdf 查证后再传值，未查证前保持 None。
+    max_skill_value：单技能创建上限，见模块常量 SKILL_MAX_AT_CREATION 的说明
+    （规则书未载明，取 KP 裁定值）。判定只针对**被点数推过上限**的技能：
+    `base` 本身已超过上限的（母语 = EDU，EDU 可到 99）不算违规，否则会误报。
     """
     problems: list[str] = []
     budget = build_budget(occ, attrs, choices)
@@ -145,8 +159,12 @@ def validate_allocation(
             problems.append(f'职业点不能投给非本职业技能：{a.name}{a.detail and f"（{a.detail}）"}')
         if a.name == '克苏鲁神话' and a.interest_points:
             problems.append('克苏鲁神话不能用兴趣点提升')
-        if max_skill_value is not None and a.value > max_skill_value:
-            problems.append(f'{a.name} 超过创建上限 {max_skill_value}（当前 {a.value}）')
+        if (max_skill_value is not None and a.value > max_skill_value
+                and a.base <= max_skill_value):
+            problems.append(
+                f'{a.name}{f"（{a.detail}）" if a.detail else ""} '
+                f'超过创建上限 {max_skill_value}（当前 {a.value}）'
+            )
 
     return problems
 

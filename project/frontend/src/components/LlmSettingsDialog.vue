@@ -13,14 +13,22 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getLlmStatus,
+  getRoomUsage,
   probeLlmModels,
   saveLlmConfig,
   testLlm,
   type LlmStatus,
+  type LlmUsage,
   type ProviderPreset,
 } from '@/api/agent'
 
-const props = defineProps<{ visible: boolean }>()
+const props = defineProps<{
+  visible: boolean
+  /** 传房间号时额外展示「本场消耗」（KP 台用；大厅不传只有全局总账） */
+  roomId?: string
+  /** KP 昵称，用于本场消耗的鉴权 */
+  kpName?: string
+}>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 
 const form = ref({
@@ -53,6 +61,27 @@ const providerLabel = computed(() => {
 function fmtNum(n: number): string {
   return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
+
+/** 本场消耗（房间维度）：从开房间到解散这一场次，仅 KP 可查（用户反馈 #3） */
+const roomUsage = ref<LlmUsage | null>(null)
+
+/** 前缀缓存命中率文案；无命中数据（老库/无缓存供应商）时返回空串隐藏该行 */
+function hitRateText(usage?: LlmUsage | null): string {
+  if (!usage?.prompt_tokens || !usage.cached_tokens) return ''
+  const rate = usage.cache_hit_rate ?? usage.cached_tokens / usage.prompt_tokens
+  return `命中率 ${(rate * 100).toFixed(1)}%`
+}
+
+/** 实际计费输入规模 = 名义输入 − 命中部分（命中单价更低，此处只体现体量） */
+function billedOf(usage?: LlmUsage | null): number {
+  if (!usage) return 0
+  return Math.max(0, (usage.prompt_tokens || 0) - (usage.cached_tokens || 0))
+}
+
+const cacheText = computed(() => hitRateText(loaded.value?.usage))
+const billedInput = computed(() => billedOf(loaded.value?.usage))
+const roomCacheText = computed(() => hitRateText(roomUsage.value))
+const roomBilled = computed(() => billedOf(roomUsage.value))
 
 /** 选项 = 探测结果优先，否则按 Base URL 匹配的静态推荐（D11：手填始终可用） */
 const modelOptions = computed(() => {
@@ -87,6 +116,7 @@ watch(
     testResult.value = null
     probedModels.value = []
     probingOk.value = null
+    roomUsage.value = null
     try {
       const status = await getLlmStatus()
       loaded.value = status
@@ -100,9 +130,16 @@ watch(
       form.value.thinking = status.disable_thinking ? 'off' : 'on'
     } catch {
       // 拦截器已提示；对话框仍可填写（保存时后端会校验）
-    } finally {
-      loading.value = false
     }
+    // 本场消耗（房间维度）：失败静默——非 KP / 房间已解散时不该阻塞设置面板
+    if (props.roomId && props.kpName) {
+      try {
+        roomUsage.value = (await getRoomUsage(props.roomId, props.kpName)).usage
+      } catch {
+        // 忽略：只影响「本场消耗」一行的展示
+      }
+    }
+    loading.value = false
   },
 )
 
@@ -380,12 +417,34 @@ async function runProbe(): Promise<void> {
         {{ testResult.ok ? '✓ ' : '✗ ' }}{{ testResult.text }}
       </div>
 
-      <!-- Token 消耗全局总账（4.4） -->
+      <!-- 本场消耗（房间维度，用户反馈 #3）：从开房间到解散，仅 KP 可见 -->
+      <div v-if="roomUsage" class="usage-row usage-row--room">
+        <span class="usage-label">本场消耗</span>
+        <span>{{ roomUsage.calls }}</span> 次调用 ·
+        输入 <span>{{ fmtNum(roomUsage.prompt_tokens) }}</span> ·
+        输出 <span>{{ fmtNum(roomUsage.completion_tokens) }}</span> tokens
+        <template v-if="roomCacheText">
+          <br />
+          <span class="usage-label">前缀缓存</span>
+          命中 <span>{{ fmtNum(roomUsage.cached_tokens || 0) }}</span>
+          （{{ roomCacheText }}）· 实际计费输入
+          <span>{{ fmtNum(roomBilled) }}</span>
+        </template>
+      </div>
+
+      <!-- Token 消耗全局总账（4.4；缓存命中观测 2026-09-10） -->
       <div v-if="loaded?.usage" class="usage-row">
-        <span class="usage-label">Token 总账</span>
+        <span class="usage-label">全局总账</span>
         <span>{{ loaded.usage.calls }}</span> 次调用 ·
         输入 <span>{{ fmtNum(loaded.usage.prompt_tokens) }}</span> ·
         输出 <span>{{ fmtNum(loaded.usage.completion_tokens) }}</span> tokens
+        <template v-if="cacheText">
+          <br />
+          <span class="usage-label">前缀缓存</span>
+          命中 <span>{{ fmtNum(loaded.usage.cached_tokens || 0) }}</span>
+          （{{ cacheText }}）· 实际计费输入
+          <span>{{ fmtNum(billedInput) }}</span>
+        </template>
       </div>
 
       <p class="llm-note">
@@ -465,6 +524,16 @@ async function runProbe(): Promise<void> {
   margin-right: 8px;
   color: #6b7c93;
   font-weight: 400 !important;
+}
+
+/* 本场消耗：与全局总账同款但换个色调，避免两行看混 */
+.usage-row--room {
+  background: rgba(103, 194, 58, 0.08);
+  border-color: rgba(103, 194, 58, 0.25);
+
+  span {
+    color: #67c23a;
+  }
 }
 
 .mock-alert {

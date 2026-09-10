@@ -91,7 +91,13 @@ async function apply(): Promise<void> {
       <el-button size="small" type="primary" :loading="switching" @click="apply">
         挂载 / 解绑
       </el-button>
-      <el-button size="small" text type="primary" @click="router.push('/modules')">
+      <!-- 带来源房间，模组库据此显示「返回 KP 控制台」；同属房间工作区，来回不拆连接 -->
+      <el-button
+        size="small"
+        text
+        type="primary"
+        @click="router.push({ name: 'module-list', query: { from_room: room.roomId } })"
+      >
         管理模组库
       </el-button>
     </div>

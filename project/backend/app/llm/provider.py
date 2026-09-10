@@ -108,6 +108,27 @@ def _friendly(status_error: APIStatusError) -> tuple[str, str]:
     return 'server', f'LLM 返回异常（{status or "未知状态"}）{("：" + detail) if detail else ""}'
 
 
+def _cached_tokens(usage_obj) -> int:
+    """从 usage 里取「命中前缀缓存的输入 token」（OpenAI 兼容 / DashScope 文本模型同名字段）。
+
+    2026-09-10 实测：DashScope 隐式缓存自动生效，同前缀第二次调用
+    `prompt_tokens_details.cached_tokens` ≈ prompt_tokens 的 99%。
+    该值只用于成本观测，取不到（供应商不给 / 结构不同）一律按 0 处理。
+    """
+    details = getattr(usage_obj, 'prompt_tokens_details', None)
+    if details is None and isinstance(usage_obj, dict):
+        details = usage_obj.get('prompt_tokens_details')
+    if details is None:
+        return 0
+    value = getattr(details, 'cached_tokens', None)
+    if value is None and isinstance(details, dict):
+        value = details.get('cached_tokens')
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _parse_tool_calls(message) -> list[dict]:
     """解析 SDK 的 tool_calls → [{id, name, arguments(dict)}]。参数 JSON 非法按坏响应处理。"""
     parsed: list[dict] = []
@@ -264,6 +285,7 @@ class LLMClient:
                         chosen_model,
                         int(getattr(usage_obj, 'prompt_tokens', 0) or 0),
                         int(getattr(usage_obj, 'completion_tokens', 0) or 0),
+                        cached_tokens=_cached_tokens(usage_obj),
                     )
                 return AssistantTurn(content=content, tool_calls=tool_calls, raw_message=message)
             except (APITimeoutError, APIConnectionError, RateLimitError, APIStatusError) as exc:

@@ -336,6 +336,30 @@ def test_engine_uses_newest_player_action_as_latest(tmp_path, monkeypatch):
     assert '【最新剧情推进】行动甲' not in sent
 
 
+def test_engine_skips_secret_rows_for_latest_action(tmp_path, monkeypatch):
+    """2026-09-10：secret 行（KP 暗骰 / keeper 笔记）不是「剧情推进」，窗口里标
+    「·仅KP」但不许当推进——否则建议会去回应一条玩家根本看不见的消息。"""
+    engine = _make_env(tmp_path, monkeypatch)
+    room_id = _seed_room(engine)
+    with Session(engine) as session:
+        session.add(Message(room_id=room_id, channel='narrative', sender='张三',
+                            content='行动乙：我改去撬铁柜。', payload={'role': 'player'}))
+        session.add(Message(room_id=room_id, channel='narrative', sender='AI主持',
+                            content='keeper 笔记：铁柜是误导，真东西在墙里。',
+                            secret=True, payload={'role': 'kp'}))
+        session.commit()
+
+    fake = FakeClient(reply=GOOD_REPLY)
+    monkeypatch.setattr(suggest_mod, 'get_client', lambda: fake)
+    monkeypatch.setattr(suggest_mod, 'get_light_client', lambda: fake)
+    asyncio.run(suggestion_engine.generate_and_broadcast(room_id))
+
+    sent = fake.calls[0]['messages'][1]['content']
+    assert '【最新剧情推进】行动乙：我改去撬铁柜。' in sent
+    assert '【最新剧情推进】keeper 笔记' not in sent
+    assert '[KP·AI主持·仅KP] keeper 笔记' in sent
+
+
 def test_engine_injects_scenario_brief(tmp_path, monkeypatch):
     """L3 模组骨架：房间未挂模组时回退 data/scenario_brief.txt（5.4：搬到 module_context）。"""
     engine = _make_env(tmp_path, monkeypatch)

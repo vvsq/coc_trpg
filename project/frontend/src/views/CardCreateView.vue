@@ -307,12 +307,35 @@ const interestUsed = computed(() =>
 const occRemain = computed(() => store.budget.occupation_points - occupationUsed.value)
 const intRemain = computed(() => store.budget.interest_points - interestUsed.value)
 
-/** 一个技能投职业点时需是本职业技能；超预算时拦截 */
+/**
+ * 单技能创建上限（与后端 `rules/occupation.py::SKILL_MAX_AT_CREATION` 同步）。
+ * 规则书第三章未载明该上限，取 KP 裁定值 90；`base` 本身已超上限的技能
+ * （母语 = EDU）不参与拦截，与后端判定口径一致。
+ */
+const SKILL_MAX_AT_CREATION = 90
+
+function rowTotal(row: AllocRow): number {
+  return row.base + row.occupation_points + row.interest_points
+}
+
+/** 被点数推过上限才算违规（母语 = EDU 那种基础值超限不算） */
+function isOverCap(row: AllocRow): boolean {
+  return rowTotal(row) > SKILL_MAX_AT_CREATION && row.base <= SKILL_MAX_AT_CREATION
+}
+
+/** 一个技能投职业点时需是本职业技能；超预算/超上限时拦截 */
 function onOccInput(row: AllocRow, v: number | undefined) {
   const val = Math.max(0, v ?? 0)
   const delta = val - row.occupation_points
   if (delta > 0 && occRemain.value < delta) {
     ElMessage.warning('职业点不足')
+    return
+  }
+  if (row.base + val + row.interest_points > SKILL_MAX_AT_CREATION
+      && row.base <= SKILL_MAX_AT_CREATION) {
+    ElMessage.warning(
+      `单技能创建上限 ${SKILL_MAX_AT_CREATION}（当前 ${row.base + val + row.interest_points}）`,
+    )
     return
   }
   row.occupation_points = val
@@ -322,6 +345,13 @@ function onIntInput(row: AllocRow, v: number | undefined) {
   const delta = val - row.interest_points
   if (delta > 0 && intRemain.value < delta) {
     ElMessage.warning('兴趣点不足')
+    return
+  }
+  if (row.base + row.occupation_points + val > SKILL_MAX_AT_CREATION
+      && row.base <= SKILL_MAX_AT_CREATION) {
+    ElMessage.warning(
+      `单技能创建上限 ${SKILL_MAX_AT_CREATION}（当前 ${row.base + row.occupation_points + val}）`,
+    )
     return
   }
   row.interest_points = val
@@ -561,6 +591,7 @@ onMounted(async () => {
             <el-tag v-if="occ && occ.free_picks > 0" :type="freeMarkedCount === occ.free_picks ? 'success' : 'info'">
               任意特长：已标记 {{ freeMarkedCount }} / {{ occ.free_picks }}
             </el-tag>
+            <el-tag type="info">单技能上限 {{ SKILL_MAX_AT_CREATION }}</el-tag>
           </div>
 
           <!-- 技能组：先勾选，加入分配明细 -->
@@ -657,6 +688,15 @@ onMounted(async () => {
                   />
                 </template>
               </el-table-column>
+              <!-- 合计 = 基础 + 职业点 + 兴趣点；超创建上限标红（后端同口径拦截） -->
+              <el-table-column label="合计" width="90">
+                <template #default="{ row }">
+                  <span :class="{ 'over-cap': isOverCap(row) }">
+                    {{ rowTotal(row) }}
+                    <template v-if="isOverCap(row)">⚠</template>
+                  </span>
+                </template>
+              </el-table-column>
               <!-- 任意特长（2.5④）：非本职行标记为本职，选满后其余禁用 -->
               <el-table-column v-if="occ && occ.free_picks > 0" label="本职特长" width="90">
                 <template #default="{ row }">
@@ -706,6 +746,8 @@ onMounted(async () => {
 .detail-pick { margin-top: 4px; }
 .tag { margin-left: 6px; }
 .muted { color: #c0c4cc; }
+/* 超过单技能创建上限：红字加粗（后端同口径会 400 拒绝） */
+.over-cap { color: #f56c6c; font-weight: 600; }
 .step-actions { display: flex; align-items: center; margin-top: 16px; }
 .flex-spacer { flex: 1; }
 </style>

@@ -62,11 +62,18 @@ const router = createRouter({
 // 防止误触导航静默断开 WS 错过剧情。房间系路由之间互跳（控制台⇄房间页
 // 的守卫弹回）不拦截；退出房间走 quitRoom → exitRoom() 先清空会话，
 // roomId 已空时守卫天然放行，不会出现二次确认。
-const ROOM_ROUTE_NAMES = new Set(['room', 'kp-console'])
+//
+// 模组库算「房间工作区」（2026-09-10 用户反馈 #2）：KP 开团中途去看/换模组是常态，
+// 若按普通页面处理，一进模组库就弹"离开房间"并在返回时丢掉连接与花名册。
+// 现在进入模组库不拦确认、不拆连接，返回控制台时同房间同身份复用原 socket
+// （ws.connect 有同房同身份的复用守卫）；真正回大厅时才由模组视图的 onUnmounted 收尾。
+export const ROOM_SCOPE_ROUTE_NAMES = new Set([
+  'room', 'kp-console', 'module-list', 'module-detail',
+])
 
 router.beforeEach(async (to, from) => {
-  if (!ROOM_ROUTE_NAMES.has(from.name as string)) return true
-  if (ROOM_ROUTE_NAMES.has(to.name as string)) return true
+  if (!ROOM_SCOPE_ROUTE_NAMES.has(from.name as string)) return true
+  if (ROOM_SCOPE_ROUTE_NAMES.has(to.name as string)) return true
   const { useRoomStore } = await import('@/stores/room')
   const room = useRoomStore()
   if (!room.roomId) return true

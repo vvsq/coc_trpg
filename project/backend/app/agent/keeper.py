@@ -43,6 +43,7 @@ from app.agent.tools import (
 from app.db import engine
 from app.llm.config import get_settings
 from app.llm.provider import LLMUnavailableError, get_client, get_light_client
+from app.llm.usage import usage_room
 from app.models import Card, Clue, GameClock, Message, Npc, Room, RoomMember, Thread
 from app.tasks import spawn_background
 from app.ws.manager import build_envelope, manager
@@ -169,7 +170,13 @@ class AutoKeeper:
             return None
         self._inflight.add(room_id)
         try:
-            payload = await self._turn(room_id, request_id=uuid.uuid4().hex[:12], trigger=trigger)
+            # 按房间统计 token（用户反馈 #3）：本轮所有 LLM 调用（含工具循环与终稿
+            # 修复重问）都归到本场次；_summarize_scene 的后台任务在此上下文内派生，
+            # 自动继承房间绑定。
+            with usage_room(room_id):
+                payload = await self._turn(
+                    room_id, request_id=uuid.uuid4().hex[:12], trigger=trigger,
+                )
         except LLMUnavailableError as exc:
             payload = await self._handle_failure(room_id, exc)
         except ValueError as exc:  # 终稿修复后仍解析失败
@@ -329,7 +336,14 @@ class AutoKeeper:
                 .limit(SESSION_WINDOW_SIZE)
             ).all()
             window = [
-                {'sender': m.sender, 'role': (m.payload or {}).get('role', ''), 'text': m.content}
+                {
+                    'sender': m.sender,
+                    'role': (m.payload or {}).get('role', ''),
+                    'text': m.content,
+                    # secret 行（keeper 笔记 / 暗骰结果）在提示词里渲染成「·仅KP」，
+                    # 否则模型分不清「玩家看过没有」（2026-09-10 修复）
+                    'secret': bool(m.secret),
+                }
                 for m in reversed(recent)
             ]
             scenario_row = get_scenario(session, room_id)
@@ -389,7 +403,11 @@ class AutoKeeper:
                 events=events,
                 investigators=investigators,
                 session_window=window,
-                latest_action=recent[0].content if recent else '',
+                # 【最新剧情推进】只取**玩家可见**的最新一条：全自动每轮结尾都会落
+                # 一条 keeper 笔记（secret=True，与叙事同 channel），直接取 recent[0]
+                # 会在 pending 补跑等"无新玩家/KP 消息"的触发下把 AI 自己的守秘笔记
+                # 当成玩家行动喂回去（2026-09-10 实测复现）
+                latest_action=next((m.content for m in recent if not m.secret), ''),
             )
             return ctx, True
 

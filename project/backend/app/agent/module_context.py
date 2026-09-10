@@ -60,6 +60,54 @@ def _load_scenario_brief() -> str | None:
     return text[:_SCENARIO_MAX_CHARS] or None
 
 
+def module_review_digest(session: Session, room_id: str) -> str:
+    """审卡用的**公开层**模组摘要（2026-09-10 用户反馈 #5）。
+
+    与 load_module_brief 的区别：这里只取"判断玩家物品/技能是否契合"所需的公开设定
+    （标题/基调/背景/时代线索/分幕标题/NPC 公开身份），**不注入守秘字段**——
+    检卡结论只给 KP 看，没必要把隐藏动机带进来，也避免污染建议文本。
+    """
+    room = session.get(Room, room_id)
+    if not room or not room.module_id:
+        return ''
+    module = session.get(ModuleScenario, room.module_id)
+    if not module or module.parse_status != 'ready' or not module.parsed:
+        return ''
+    parsed = module.parsed
+
+    parts: list[str] = [f"模组：{parsed.get('title') or module.name}"]
+    if parsed.get('tone'):
+        parts.append(f"基调：{parsed['tone']}")
+    if parsed.get('background'):
+        parts.append(f"背景：{_clip(parsed['background'], _FIELD_LIMITS['background'])}")
+    if parsed.get('hook'):
+        parts.append(f"开场钩子：{_clip(parsed['hook'], _FIELD_LIMITS['clue'])}")
+
+    acts = [a for a in (parsed.get('acts') or []) if isinstance(a, dict)]
+    if acts:
+        titles = '；'.join(
+            f"{a.get('order', i + 1)}. {a.get('title', '')}" for i, a in enumerate(acts)
+        )
+        parts.append(f'分幕：{titles}')
+
+    npcs = [n for n in (parsed.get('npcs') or []) if isinstance(n, dict)]
+    if npcs:
+        # 只给公开身份（隐藏动机属守秘字段，不进审卡上下文）
+        who = '；'.join(
+            f"{n.get('name', '?')}（{_clip(n.get('public_identity', ''), 40) or '身份未明'}）"
+            for n in npcs[:8]
+        )
+        parts.append(f'NPC（公开身份）：{who}')
+
+    clocks = [c for c in (parsed.get('clocks') or []) if isinstance(c, dict)]
+    if clocks:
+        names = '；'.join(str(c.get('name', '')) for c in clocks[:4] if c.get('name'))
+        if names:
+            parts.append(f'威胁时钟：{names}')
+
+    return '\n'.join(parts)
+
+
 def load_module_brief(session: Session, room_id: str) -> str | None:
     """房间的模组骨架：挂载且已解析 → 结构化渲染；否则回退单文件骨架。"""
     room = session.get(Room, room_id)

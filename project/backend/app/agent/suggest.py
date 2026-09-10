@@ -34,6 +34,7 @@ from app.agent.module_context import load_module_brief
 from app.db import engine
 from app.llm.config import get_settings
 from app.llm.provider import LLMUnavailableError, get_client, get_light_client
+from app.llm.usage import usage_room
 from app.models import Card, Message, Room, RoomMember
 from app.tasks import spawn_background
 from app.ws.manager import build_envelope, manager
@@ -88,10 +89,12 @@ class SuggestionEngine:
             return None
         self._inflight.add(room_id)
         try:
-            payload = await self._generate(
-                room_id, request_id=request_id or uuid.uuid4().hex[:12],
-                focus=focus, trigger=trigger,
-            )
+            # 按房间统计 token（用户反馈 #3）：本次生成的所有 LLM 调用计入本场次
+            with usage_room(room_id):
+                payload = await self._generate(
+                    room_id, request_id=request_id or uuid.uuid4().hex[:12],
+                    focus=focus, trigger=trigger,
+                )
         finally:
             self._inflight.discard(room_id)
         await self._broadcast_payload(room_id, payload)
@@ -175,7 +178,7 @@ class SuggestionEngine:
                     'san_max': int(derived.get('SAN', 0)),
                 })
 
-            # L5 会话窗口：最近 N 条 narrative（含骰/状态/系统行，content 已是可读文本）
+            # L5 会话窗口：最近 N 条 narrative（含骰/状态行，content 已是可读文本）
             recent = session.exec(
                 select(Message)
                 .where(Message.room_id == room_id, Message.channel == 'narrative')
@@ -187,13 +190,19 @@ class SuggestionEngine:
                     'sender': m.sender,
                     'role': (m.payload or {}).get('role', ''),
                     'text': m.content,
+                    # secret 行（KP 暗骰结果 / keeper 笔记）在提示词里渲染成「·仅KP」：
+                    # 建议只发给 KP，看到暗骰是合理的，但必须标明玩家不可见
+                    # （2026-09-10 修复）
+                    'secret': bool(m.secret),
                 }
                 for m in reversed(recent)
             ]
-            # "最新剧情推进"：窗口内最新一条消息（KP 叙事或玩家行动皆可——
-            # 触发源已扩展到 KP 叙事后，上下文重心必须跟随最新推进，
-            # 否则 KP 采纳建议继续叙事后，建议仍会回应上一条玩家行动）
-            latest_action = recent[0].content if recent else ''
+            # "最新剧情推进"：窗口内最新的**玩家可见**消息（KP 公开叙事或玩家行动
+            # 皆可——触发源已扩展到 KP 叙事后，上下文重心必须跟随最新推进，否则 KP
+            # 采纳建议继续叙事后，建议仍会回应上一条玩家行动）。
+            # 但必须跳过 secret 行：KP 暗骰结果/keeper 笔记不是"剧情推进"，
+            # 取到它们会让建议去回应一条玩家根本看不见的消息（2026-09-10 修复）。
+            latest_action = next((m.content for m in recent if not m.secret), '')
 
             return SuggestionContext(
                 room_name=room.name,

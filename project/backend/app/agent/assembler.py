@@ -53,6 +53,23 @@ def _investigator_line(p: dict) -> str:
     return line
 
 
+def _session_line(m: dict) -> str:
+    """【近期剧情】的单行渲染（协同/全自动共用，防两处格式漂移）。
+
+    窗口里混着**玩家可见**与 **secret（仅 KP）** 两类消息：全自动每轮结尾都会落
+    一条 keeper 笔记，KP 暗骰结果也只进 KP 屏。它们与公开叙事同属 narrative 频道，
+    不加标注时模型分不清"玩家看过没有"——D8 的逐字替换兜不住**改写过的**守秘内容。
+    故 secret 行显式打「·仅KP」标记，配合段头警示让模型自己守住边界。
+    """
+    sender = m.get('sender') or '?'
+    role = m.get('role')
+    label = f'KP·{sender}' if role == 'kp' else sender
+    if m.get('secret'):
+        label += '·仅KP'
+    text = (m.get('text') or '').strip()[:_LINE_MAX]
+    return f'[{label}] {text}'
+
+
 @dataclass
 class SuggestionContext:
     """协同建议的输入上下文。字段均可缺省，组装时空段落自动跳过。"""
@@ -63,9 +80,10 @@ class SuggestionContext:
     # [{name(角色名), player_name(花名册昵称), occupation, hp, hp_max, san, san_max}]
     # L4 的轻量版（只取存活必需项）；player_name 缺失时渲染退化为只显示角色名
     investigators: list[dict] = field(default_factory=list)
-    # L5 会话窗口：[{sender, role, text}]，时间升序（旧 → 新）
+    # L5 会话窗口：[{sender, role, text, secret}]，时间升序（旧 → 新）；
+    # secret=True 的行渲染成「·仅KP」（玩家看不到，不得写进公开内容）
     session_window: list[dict] = field(default_factory=list)
-    latest_action: str = ''  # 触发本次生成的玩家行动原文
+    latest_action: str = ''  # 触发本次生成的玩家行动原文（只取玩家可见消息）
     focus: str = ''  # KP 附加指令（如「偏向悬疑」「避免战斗」）
     # ── 为 4.3/4.4 五层全量预留 ──
     style: str | None = None        # L2：KP 风格参数 → 叙事指令
@@ -96,14 +114,9 @@ def build_suggestion_messages(ctx: SuggestionContext) -> list[dict]:
         sections.append(f'【模组骨架】\n{ctx.scenario}')
 
     if ctx.session_window:
-        lines = []
-        for m in ctx.session_window[-SESSION_WINDOW_SIZE:]:
-            sender = m.get('sender') or '?'
-            role = m.get('role')
-            label = f'KP·{sender}' if role == 'kp' else sender
-            text = (m.get('text') or '').strip()[:_LINE_MAX]
-            lines.append(f'[{label}] {text}')
-        sections.append('【近期剧情】（旧 → 新）\n' + '\n'.join(lines))
+        lines = [_session_line(m) for m in ctx.session_window[-SESSION_WINDOW_SIZE:]]
+        sections.append('【近期剧情】（旧 → 新；标「·仅KP」的行玩家看不到，'
+                        '禁止写进玩家可见的建议）\n' + '\n'.join(lines))
 
     if ctx.focus:
         sections.append(f'【KP 附加指令】{ctx.focus}')
@@ -202,9 +215,10 @@ class AutoContext:
     # L4：[{name(角色名), player_name(花名册昵称), occupation, hp, hp_max, san,
     #      san_max, skills: {技能名: 值}}]（BP3）；工具 target 只认 player_name
     investigators: list[dict] = field(default_factory=list)
-    # L5 会话窗口：[{sender, role, text}]，时间升序（旧 → 新）
+    # L5 会话窗口：[{sender, role, text, secret}]，时间升序（旧 → 新）；
+    # secret=True 的行渲染成「·仅KP」（玩家看不到，公开叙事禁止引用）
     session_window: list[dict] = field(default_factory=list)
-    latest_action: str = ''              # 触发本轮的行动原文
+    latest_action: str = ''              # 触发本轮的行动原文（只取玩家可见消息）
     focus: str = ''                      # KP 插话/附加指令
 
 
@@ -266,14 +280,9 @@ def build_auto_messages(ctx: AutoContext) -> list[dict]:
             '技能值拿不准先 get_card 查）\n' + '\n'.join(lines))
 
     if ctx.session_window:
-        lines = []
-        for m in ctx.session_window[-SESSION_WINDOW_SIZE:]:
-            sender = m.get('sender') or '?'
-            role = m.get('role')
-            label = f'KP·{sender}' if role == 'kp' else sender
-            text = (m.get('text') or '').strip()[:_LINE_MAX]
-            lines.append(f'[{label}] {text}')
-        turn_sections.append('【近期剧情】（旧 → 新）\n' + '\n'.join(lines))
+        lines = [_session_line(m) for m in ctx.session_window[-SESSION_WINDOW_SIZE:]]
+        turn_sections.append('【近期剧情】（旧 → 新；标「·仅KP」的行玩家看不到，'
+                             '公开叙事禁止引用其内容）\n' + '\n'.join(lines))
 
     if ctx.focus:
         turn_sections.append(f'【KP 插话/指令】{ctx.focus}')

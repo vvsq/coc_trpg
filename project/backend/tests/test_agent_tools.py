@@ -13,7 +13,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 import app.models  # noqa: F401  确保全部 table=True 模型注册进 metadata
 import app.agent.tools as tools_mod
 from app.agent.tools import execute_tool
-from app.models import Card, Message, Room, RoomMember, ScenarioState, save_card
+from app.models import Card, Message, Room, RoomMember, ScenarioState, SkillRow, save_card
 from app.rules.dice import D100Roll
 
 
@@ -30,7 +30,7 @@ def env(tmp_path, monkeypatch):
         card = Card(owner='张三')
         save_card(card, {
             'name': '张三', 'occupation': '会计师',
-            'attributes': {'STR': 50, 'INT': 65, 'POW': 60},
+            'attributes': {'STR': 50, 'DEX': 65, 'INT': 65, 'POW': 60},
             'derived': {'HP': 11, 'SAN': 60},
             'state': {'current_hp': 11, 'current_sanity': 60},
             'skills': [
@@ -512,6 +512,66 @@ def test_update_status_and_san_check_accept_card_name(env, monkeypatch):
         'target': 'test', 'loss_formula': '0/1D3', 'reason': '目睹白霜异象',
     }, rid)))
     assert scor.get('target') == '玩家甲'
+
+
+# ---------- 检定下放：卡上没加点的技能按基础值（2026-09-10 用户反馈 #4） ----------
+#
+# 此前 `create_check_request` 只用 `_skill_value`（只翻卡面 skills 数组），KP/AI
+# 点名玩家没加过点的技能（最常见的「所有人投个聆听」）会直接报「技能表里没有该技能」。
+# 规则书口径：任何技能都能尝试，没加点就是基础值。
+
+def _seed_skill_rows(engine, rows: list[tuple[int, str, int | None, str]]) -> None:
+    """灌技能表底子：(id, name, base, base_expr)。"""
+    with Session(engine) as s:
+        for sid, name, base, expr in rows:
+            s.add(SkillRow(id=sid, name=name, base=base, base_expr=expr))
+        s.commit()
+
+
+def test_request_check_falls_back_to_skill_base(env):
+    engine, rid = env
+    _seed_skill_rows(engine, [(9001, '聆听', 20, '')])
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': '张三', 'skill_name': '聆听',
+        'difficulty': 'standard', 'reason': '听墙后的动静',
+    }, rid)))
+    assert out.get('status') == 'requested'
+    assert out['value'] == 20 and out['value_source'] == 'base'
+    rows = [m for m in _msgs(engine, rid) if m.type == 'check_request']
+    assert rows[-1].payload['value'] == 20
+    assert rows[-1].payload['base_value'] is True  # KP 面板据此标「基础值」
+
+
+def test_request_check_card_value_takes_precedence(env):
+    """卡上有加点时仍用卡面值（新增回退不能改变既有行为）。"""
+    engine, rid = env
+    _seed_skill_rows(engine, [(9001, '侦查', 25, '')])
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': '张三', 'skill_name': '侦查',
+        'difficulty': 'standard', 'reason': '查看货架',
+    }, rid)))
+    assert out['value'] == 50 and out['value_source'] == 'card'  # 25 基础 + 25 职业点
+
+
+def test_request_check_base_expr_uses_card_attributes(env):
+    """表达式基础值按角色属性解算：闪避 = DEX/2（DEX 65 → 32）。"""
+    engine, rid = env
+    _seed_skill_rows(engine, [(9002, '闪避', None, 'DEX/2')])
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': '张三', 'skill_name': '闪避',
+        'difficulty': 'standard', 'reason': '躲开倒下的书架',
+    }, rid)))
+    assert out['value'] == 32 and out['value_source'] == 'base'
+
+
+def test_request_check_unknown_skill_still_errors(env):
+    """表里查不到的技能名（自定义技能）仍报错，但文案引导改用标准技能名。"""
+    _, rid = env
+    out = json.loads(asyncio.run(execute_tool('request_check', {
+        'target': '张三', 'skill_name': '虚空亲和',
+        'difficulty': 'standard', 'reason': 'x',
+    }, rid)))
+    assert 'error' in out and '标准技能名' in out['error']
 
 
 def test_add_clue_keeper_note_avoids_double_punctuation(env):

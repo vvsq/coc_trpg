@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteModule, listModules } from '@/api/modules'
 import ModuleUploadDialog from '@/components/ModuleUploadDialog.vue'
+import { useRoomReturn } from '@/composables/useRoomReturn'
 import {
   PARSE_STATUS_LABEL,
   PARSE_STATUS_TAG,
@@ -19,6 +20,8 @@ import {
 } from '@/types/module'
 
 const router = useRouter()
+// 顶栏返回：带来源房间时回 KP 控制台，否则回大厅（并负责离开工作区时拆连接）
+const { returnLabel, goBack, carryQuery } = useRoomReturn()
 const modules = ref<ModuleMeta[]>([])
 const loading = ref(true)
 const uploadVisible = ref(false)
@@ -34,10 +37,14 @@ async function refresh(): Promise<void> {
 
 onMounted(refresh)
 
+function openDetail(id: number): void {
+  router.push({ name: 'module-detail', params: { id: String(id) }, query: carryQuery() })
+}
+
 function onUploaded(meta: ModuleMeta): void {
   refresh()
   // 上传完直接进详情页：下一步就是选模型解析，少点一次
-  router.push({ name: 'module-detail', params: { id: String(meta.id) } })
+  openDetail(meta.id)
 }
 
 async function onDelete(row: ModuleMeta): Promise<void> {
@@ -63,7 +70,10 @@ async function onDelete(row: ModuleMeta): Promise<void> {
         <h2>模组库</h2>
         <p class="sub">上传剧本 → 解析为结构化骨架 → 在 KP 台挂载</p>
       </div>
-      <el-button type="primary" @click="uploadVisible = true">上传模组</el-button>
+      <div class="head-actions">
+        <el-button @click="goBack">{{ returnLabel }}</el-button>
+        <el-button type="primary" @click="uploadVisible = true">上传模组</el-button>
+      </div>
     </div>
 
     <div v-loading="loading" class="grid">
@@ -71,7 +81,7 @@ async function onDelete(row: ModuleMeta): Promise<void> {
         v-for="row in modules"
         :key="row.id"
         class="mod-card"
-        @click="router.push({ name: 'module-detail', params: { id: String(row.id) } })"
+        @click="openDetail(row.id)"
       >
         <div class="mod-head">
           <span class="mod-name" :title="row.name">{{ row.name }}</span>
@@ -130,6 +140,12 @@ async function onDelete(row: ModuleMeta): Promise<void> {
   font-size: 22px;
   font-weight: 600;
   letter-spacing: 1px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .sub {

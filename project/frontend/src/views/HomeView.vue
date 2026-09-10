@@ -9,9 +9,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createRoom, joinRoom, listRooms } from '@/api/rooms'
 import { listCards, type CardListItem } from '@/api/cards'
+import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
 import type { RoomListItem, WsMember } from '@/types/ws'
 
 const router = useRouter()
+/** 全局 API / 模型配置弹窗（详细设置页；房间与模组页只做只读回显） */
+const settingsVisible = ref(false)
 
 // ---------- 建房 ----------
 const createVisible = ref(false)
@@ -93,6 +96,12 @@ onMounted(refreshRooms)
     <h1 class="home-title">雾都疑云 · CoC 跑团助手</h1>
     <p class="home-sub">创建房间开启调查，或输入房间号加入一场正在进行的故事</p>
 
+    <!-- 全局 LLM / API 配置入口（2026-09-10 用户反馈 #1）：配置是全局的，
+         所以把详细设置页放在大厅；房间与模组页只做只读回显 + 检测门禁 -->
+    <div class="home-tools">
+      <el-button size="small" plain @click="settingsVisible = true">API / 模型配置</el-button>
+    </div>
+
     <div class="entries">
       <div class="entry-card entry-card--kp" @click="createVisible = true">
         <span class="entry-icon">🎭</span>
@@ -166,6 +175,9 @@ onMounted(refreshRooms)
         <el-button type="primary" @click="doJoin">加入</el-button>
       </template>
     </el-dialog>
+
+    <!-- 全局 API / 模型配置（与 KP 台同一个组件：供应商/Key/模型/超时/轻任务模型/Token 总账） -->
+    <LlmSettingsDialog v-model:visible="settingsVisible" />
   </main>
 </template>
 
@@ -186,6 +198,12 @@ onMounted(refreshRooms)
   font-size: 30px;
   font-weight: 600;
   letter-spacing: 2px;
+}
+
+.home-tools {
+  display: flex;
+  justify-content: center;
+  margin: -18px 0 26px;
 }
 
 .home-sub {

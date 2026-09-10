@@ -332,6 +332,28 @@ class LlmUsage(SQLModel, table=True):
     calls: int = Field(default=0)
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
+    # 命中「前缀缓存」的输入 token 数（2026-09-10 观测补齐）。它是 prompt_tokens 的
+    # 子集：供应商按折扣计价，故 prompt_tokens 只是**名义输入**，命中率才是成本依据。
+    # 无缓存的供应商/模型恒为 0，不影响既有统计口径。
+    cached_tokens: int = Field(default=0)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
+class RoomUsage(SQLModel, table=True):
+    """单房间 token 消耗（2026-09-10 用户反馈 #3）。
+
+    全局总账（LlmUsage）回答"一共花了多少"，判不出一局团的开销；本表按 room_id
+    累计"从开房间到房间结束"这一场次的花费，KP 台设置面板展示（仅 KP 可见）。
+    房间销毁时一并删除；模组解析等与房间无关的调用只记全局。
+    """
+
+    __tablename__ = 'room_usage'
+
+    room_id: str = Field(primary_key=True, foreign_key='room.id')
+    calls: int = Field(default=0)
+    prompt_tokens: int = Field(default=0)
+    completion_tokens: int = Field(default=0)
+    cached_tokens: int = Field(default=0, description='命中前缀缓存的输入 token（prompt 的子集）')
     updated_at: datetime = Field(default_factory=datetime.now)
 
 

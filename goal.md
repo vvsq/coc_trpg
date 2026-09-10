@@ -16,10 +16,11 @@
 - [x] 阶段 3：局域网真人团（★ MVP 核心：房间 / WS / 双聊天框 / KP 控制台 / 存档）——3.1~3.4 完成
 - [ ] 阶段 4：LLM 集成、Agent 配置与双模式主持（已拆分 4.1~4.4，见 §7，2026-09-06）——4.1 + 4.1+ 修订 + 4.2 + 4.3 + 4.4 完成（2026-09-08，阶段 4 全部完成）
 - [x] 阶段 5：模组解析（上传 TXT/PDF/DOCX → 手动选模型解析 → 模组库校对 → 房间挂载，2026-09-10）
-- [ ] 阶段 6：打磨、演示材料与部署（已瘦身，见 §7）
+- [ ] 阶段 6：打磨与演示（2026-09-10 重写为 6 块，含 UI 美化 / 单端口部署 / 安全收口，见 §7）
 
 **MVP 定义**：局域网内 1 个 KP + 2~4 个玩家，用浏览器开一局真人 CoC 团（建房 → 加入 → 双聊天框 → 掷骰 → KP 改状态 → 存档续玩）。
-**下一步动作**：阶段 6（打磨、演示材料与部署）。阶段 5 已于 2026-09-10 完成（模组库 + 结构化解析 + 房间挂载替换临时骨架，详见 §11）。
+**下一步动作**：阶段 6（6.1 部署与分发 → 6.2 UI 美化 → 6.3 健壮性 → 6.4 性能 → 6.5 安全收口 → 6.6 演示验收，详见 §7）。
+阶段 5 已于 2026-09-10 完成（模组库 + 结构化解析 + 房间挂载）；同日按用户 7 条实测反馈做了第二批修复（检卡 / 检定下放任意技能 / 技能上限 / 按房间 token / 模组库返回 / 大厅 API 配置 / 解析检测门禁，详见 §11）。
 
 ---
 
@@ -132,6 +133,8 @@ FastAPI 后端（唯一权威状态源，以主持人端裁定为准）
 - 组装器是独立模块：同一份记忆与状态可服务全自动/协同两种模式，且便于离线回归测试提示词效果
 - 模板全部版本化入库（`prompt_version`），风格漂移时能回滚
 - **缓存感知布局（2026-09-06 增补，借鉴 AiChatTrpg CachedPrompt 三段式）**：组装时把 L1 基座放 system（跨回合字节稳定 = BP1）、L3 剧情记忆快照放前置 user 消息（记忆不变时稳定 = BP2）、L4 状态与 L5 会话窗口放尾部 user（每回合变化 = BP3），并用助手锚定消息划清 BP2/BP3 边界——前缀字节稳定可命中供应商 prompt 缓存，长团 token 成本显著下降。分层语义不变，只规定消息排布顺序
+- **缓存命中实测与观测（2026-09-10）**：DashScope **隐式缓存自动开启**（无需 `cache_control`），实测同前缀第二次调用 `prompt_tokens_details.cached_tokens` = 9216/9275（**99.4%**）；最小可缓存前缀 1024 tokens 且**按 1024 分块**（短前缀只命中首块）。因此 `prompt_tokens` 只是**名义输入**，`llm_usage.cached_tokens` + `cache_hit_rate` 才是成本依据（设置面板显示"命中 N（命中率 X%）· 实际计费输入 = 名义 − 命中"）。**结论：不要加显式 `cache_control`**——规则是"以标记为终点向前回溯"，打在 system 上只能覆盖 system+tools（实测 3975，比隐式少一半以上）；若将来确需确定性缓存，标记应打在 **BP2 那条 user 消息**上（可覆盖 ~7500）。单次全自动调用体积实测：system 2317 字 + TOOL_SCHEMAS 6771 字 + BP2 4238 字 + BP3 3495 字 ≈ 9275 tokens，其中**约 75% 的字节跨轮稳定**
+- **窗口可见性标注（2026-09-10）**：`secret` 消息（keeper 笔记 / 暗骰结果）与公开叙事同属 narrative 频道，进 L5 窗口时由 `assembler._session_line` 统一打「·仅KP」标记 + 段头警示（D8 是逐字替换，兜不住改写过的守秘内容，故靠标注让模型自己守边界）；`latest_action` 只取**玩家可见**消息——此前 `recent[0]` 会在"无新玩家/KP 消息"的触发下取到 AI 自己的守秘笔记
 
 ### 6.2 KP 风格系统（借鉴 coc-trpg-skill）
 
@@ -417,14 +420,59 @@ LLM 上下文由记忆模块**按需检索组装**，不把全文塞进 prompt�
 - [x] **验收**：真实模组（《雪盲》DOCX + 《八月二十二日》PDF）上传 → 结构化 JSON 通过 → 模组挂载后 AI 按模组 NPC/线索/时钟主持，玩家端零剧透（详见 §11 2026-09-10 两行）
 - 实施决策（用户 2026-09-10）：① 结构化结果**支持人工编辑修正关键字段**（PUT 局部覆盖）；② 一个房间同时只挂 1 个模组，可换绑/解绑；③ **手动点「开始解析」且可选解析模型**（上传只提取文本，不自动花钱）
 
-### 阶段 6：打磨与演示（2 天；2026-09-06 瘦身：存读档 / 历史检索 / WS 心跳重连已随 3.4 完成，LLM 降级随 4.1 完成）
+### 阶段 6：打磨与演示（**2026-09-10 重写**，3~4 天）
 
-- [ ] 健壮性收尾：输入校验、错误提示统一（加载态 / 空状态）
-- [ ] 界面打磨：移动端浏览器适配（跑团常用手机看卡）、套用 logo
-- [ ] 性能：单房间 6 人同时在线操作无明显卡顿（LLM 等待不阻塞聊天）
-- [ ] 部署：一键启动脚本（`start.bat`：起后端 + 托管前端产物），编写《部署文档》《使用说明》
-- [ ] 演示材料：功能截图 / 演示流程脚本（3 分钟展示核心卖点：双模式主持 + 双聊天框 + 本地存储）
-- [ ] **验收**：全新电脑按部署文档 10 分钟内跑起来，按使用说明完成一局演示团
+> 重写理由（用户 2026-09-10 决策）：原计划（2 天 5 条）写在阶段 4 之前，现在回头看**方向对但偏薄**——
+> ① 漏了 UI 美化（用户明确要求纳入本阶段：现有 UI "能用但不好看"，这是演示的第一印象）；
+> ② 漏了阶段 1~5 积累的遗留与安全项（WS 叙事频道全员可发、全局资源无鉴权、服务端组选择校验未接线等）；
+> ③ 部署只写了一句"一键脚本"，而演示必须**单端口**（现在仍是 5173+8000 双端口，外行跑不起来）；
+> ④ 缺少可执行的性能口径与质量基线。故重写为 6 块，并明确"演示前必做"的优先级。
+
+#### 6.1 部署与分发（★演示前必做，0.5 天）
+- [ ] **单端口托管**：前端 `npm run build` 产物由 FastAPI `StaticFiles` 托管 + SPA fallback（`/assets/*` 静态、其余回 `index.html`），开发仍走 Vite 代理
+- [ ] `start.bat` 一键启动：检测 Python/Node → 建 venv 装依赖 → 建库/迁移 → 起后端 → 自动开浏览器；端口占用与缺依赖要给人话提示
+- [ ] `.env.example` + 首次配置向导（没配 key 也能进 mock 模式演示）
+- [ ] 《部署文档》（目标：全新机器 10 分钟跑起来）与《使用说明》（KP 视角 + 玩家视角）
+
+#### 6.2 UI 美化与一致性（★用户要求，1.5 天）
+- [ ] **设计令牌**：色板/间距/字号/圆角/阴影统一为 CSS 变量（现在颜色散落在各组件 `<style scoped>` 里，改一处要满地找）
+- [ ] Element Plus 暗色主题定制（统一组件观感：表格/标签/弹窗，现有暗色适配靠零散 `:deep` 覆写）
+- [ ] 三个主界面重排与视觉减负：大厅（首屏信息层级）、房间页（剧情流是主角，侧栏收敛）、KP 控制台（面板过多 → 分组折叠/标签页）
+- [ ] **移动端适配**（跑团常用手机看卡看剧情）：房间页单列布局、侧栏改抽屉、骰子与发送按钮加大、控制台给只读精简视图
+- [ ] logo / favicon / 空状态插画 + 加载骨架屏（现在只有 el-empty 与 spinner）
+- [ ] 统一空态/加载态/错误态三件套组件，替换各页零散写法
+
+#### 6.3 健壮性与错误治理（0.5 天）
+- [ ] 统一错误提示与**重试入口**（LLM 降级横幅已有，补 KP 侧「重试本轮」按钮）
+- [ ] 表单校验收口（技能上限已随反馈 #6 落地；补属性/物品/背景的边界与必填提示）
+- [ ] 后端统一异常 JSON 形态 + 未捕获异常兜底（现在依赖 FastAPI 默认 detail）
+- [ ] 前端断网/后端挂掉的可感知提示（WS 重连中/已断开状态条）
+- [ ] **接线 `validate_group_selection`**（`occupation.py` 定义已久、服务端未用，组选择目前只靠前端拦）
+- [ ] **WS 频道白名单**（`ws/rooms.py` 的 TODO）：narrative 频道目前全员可发，玩家能伪造 KP 署名叙事——按 role 校验或改白名单
+
+#### 6.4 性能与容量（0.5 天）
+- [ ] 实测口径落地：单房 6 连接 + 并发掷骰 + AI 轮次在跑 → 广播 P95 延迟 < 200ms、聊天输入不阻塞
+- [ ] SQLite：开 WAL + 写锁热点审视（AI 轮次与玩家操作并发时）
+- [ ] 长团体验：消息列表虚拟滚动 / 分页（千条以上不卡）
+- [ ] LLM 侧：按房间 token 面板（已落地）复盘一轮成本，必要时再降编排开销（模组按幕裁剪、工具定义瘦身等，见 §6.1 待办）
+
+#### 6.5 安全与隐私收口（0.5 天；进内网/公网前必做）
+- [ ] 全局资源鉴权：模组 CRUD、KP 风格 CRUD 目前任何访客可调（局域网 MVP 的取舍，上线前收紧）
+- [ ] CORS 收紧为可配置白名单（现写死 127.0.0.1:5173）
+- [ ] 房间号暴力枚举防护（8 位短码 + 失败限速）
+- [ ] 日志脱敏：key / 玩家昵称 / 聊天正文不入日志（现仅记元数据，复核一遍）
+- [ ] 确认前端永不回显 key 明文（现状 ✅，验收时复测）
+
+#### 6.6 演示与验收（0.5 天）
+- [ ] 一键自检脚本：pytest + vue-tsc + `/api/health` + 一条 mock 全流程冒烟
+- [ ] 3 分钟演示脚本（分镜）：建房 → 玩家入房带卡 → 双聊天框 → 明骰/暗骰 → 模组上传解析 → 挂载 → 协同建议 → 切全自动跑一轮 → 检卡 → 存读档 → 退出
+- [ ] 演示素材：功能截图集 / 关键界面录屏
+- [ ] **验收**：全新电脑按《部署文档》10 分钟内跑起来；按《使用说明》完成一局演示团（含一次断网降级恢复）
+
+#### 阶段 6 明确不做（保持范围）
+- 多人跨幕换卡（《雪盲》类单人模组改编）、法术/魔法书系统、战役长线成长（幕间成长）、移动端原生封装
+
+---
 
 ---
 
@@ -515,5 +563,7 @@ COC_project/
 | 2026-09-08 | **人工测试四项反馈修复（AI 代写，浏览器双端实测通过）**：①collab 模式 KP 手动检定下放——tools.py 抽 create_check_request 公共函数（AI request_check 与 KP 手动共用）+ 新端点 POST /rooms/{id}/check-requests（kp.py，kp_name 鉴权）+ KPConsoleView「检定下放」面板（目标/技能/难度/缘由，sender 为 KP）；②LLM 运行时参数打通——PUT /llm/config 与设置面板补 timeout/retries/disable_thinking（修复 DB 权威后 30s 超时无法自救的配置悬空），实测 timeout=600 + qwen3.8-max 主/qwen3.8-flash 轻全链路建议生成成功；/llm/test 一并 ping 轻模型（light_latency_ms/light_error）；AiSuggestionPanel 增加「已思考 Ns」实时计时；③离开判定重构——WS 断开一律按掉线（不落库/不广播/不改成员列表），显式 leave 才算退出（退出按钮发 WS leave；关网页 pagehide→sendBeacon POST /rooms/{id}/leave 删花名册行+广播），成员列表/room_state 改用持久花名册全量，prune_stale_loop 改静默摘除+补 ws.close()（180s），前端心跳 PONG_TIMEOUT=90s+document.hidden 跳过判死+visibilitychange 补 ping；enterRoom 幂等调 REST joinRoom 补花名册行（beacon 删行后刷新自愈），join 对 KP 行缺失也补建；④死代码清理——删脚手架遗留 12 文件（TheWelcome/WelcomeItem/HelloWorld/icons×5/assets css×2+logo.svg/HelloWorld.spec/App.spec/e2e vue.spec），补生成缺失的 app/rules/data/madness_tables.json（extract_madness_tables.py，276 行），AboutView 占位页补实内容；pytest 180 全绿 + vue-tsc 通过 | 遗留记录：Card.owner 占位、narrative 频道全员可发（TODO）、validate_group_selection 未接线（有意为之）、L4 card_detail 恒 None（阶段 5 接模组库） |
 | 2026-09-10 | **模组临时接入点恢复**：重建 scenario_brief.example.txt（格式模板+使用说明：骨架 1000~2000 字、全局单文件、改动即生效无需重启）；依用户提供的《雪盲》（Sabrina 著，docx 于 COC_project/docs/测试模组/，人工资料不进本仓库）手写生成 backend/data/scenario_brief.txt（1776 字骨架：背景/核心异常/三幕剧情链/时钟/NPC/检定/三条线索路径/挽歌基调），已验证 _load_scenario_brief() 可加载——协同建议与全自动主持的 L3 层即接入该骨架 | 阶段 5 前的临时方案（4.1 遗留）：全局单文件、所有房间共享；模组库上线后按房间选择替换 |
 | 2026-09-10 | **阶段 5 完成（AI 代写）**：① **模组库数据层**——新建 `module_scenario` 表（raw_text 全文 / parsed 结构化 JSON / parse_status 状态机 / parse_model 追溯）+ `Room.module_id`，增量迁移 `scripts/migrate_45.py`（幂等，不动存量房间与存档）；② **上传与提取**——`app/api/modules.py`（列表/上传/详情/局部覆盖校对/删除）与 `app/agent/module_parser.py` 提取器：TXT/MD 编码链回退、DOCX 用标准库 zipfile 读 word/document.xml（venv 无 python-docx）、PDF 用 pypdf，含体积/空文本/扫描件错误分支；③ **结构化解析**——分块（≤4000 字、200 字重叠，≤3 块单次抽取，超则总览+逐块）→ map/reduce 合并（实体名归一 _canon_key 剥后缀与括号、技能同义归一 canon_skill、时长字段取长、acts 以总览为准、线索/检定去重合并、条目上限+截断警告）→ normalize_parsed 唯一形态；解析走 `spawn_background` + 轮询，进程内 `_PARSING` 集合做幂等与重启自愈，JSON 解析失败带原文重问一次；④ **手动解析 + 选模型**——`POST /modules/{id}/parse`（可传 model，留空=轻任务模型），上传不自动解析；⑤ **模组库前端**——`/modules` 列表（卡片网格/状态徽章）、`/modules/:id` 详情（解析面板+原文检索高亮+结构化分块就地编辑）、上传弹窗，均独立组件（不塞进 1100 行的 KPConsoleView）；⑥ **房间挂载与注入替换**——`PUT /rooms/{id}/module`（kp_name 403 + sys 消息 + module_changed 全员广播）+ `app/agent/module_context.py` 的 `load_module_brief` 同时接管协同 L3 与全自动 BP2（未挂载回退 scenario_brief.txt），渲染分【公开层】【仅KP】两层并按字段裁剪；模组守秘字段并入 `_keeper_markers`（补上"刚挂模组、线索还没登记"的防剧透盲区）；⑦ 测试 189→266 全绿（新增 test_module_extract/parser/modules_api/binding 四个文件）+ vue-tsc 通过；真实模型实测：《雪盲》DOCX 单次解析 42s（3 幕/5 NPC/6 线索/2 时钟/3 结局/4 检定，含 4 条存疑提示）、《八月二十二日》PDF 多块解析 193s（修合并前是 8 幕/7 时钟/17 结局/22 检定，修后 4 幕/2 时钟/4 结局/15 检定） | 用户决策：结构化结果可人工校对、一房一模组、手动选模型解析；浏览器实测见下一行 |
+| 2026-09-10 | **用户 7 条实测反馈修复 + 阶段 6 重写（AI 代写）**：① **模组解析门禁**——解析页加「检测模型」（`POST /llm/test`，前端超时放宽到 90s，此前 10s 会误判慢模型不可用）+ 只读回显当前全局配置，检测通过才启用「开始解析」；大厅新增「API / 模型配置」入口复用 LlmSettingsDialog（全局配置的详细设置页放大厅，房间/模组页只做回显）。② **模组库返回房间**——模组库并入「房间工作区」（router `ROOM_SCOPE_ROUTE_NAMES` 含 module-list/detail：进入不再弹"离开房间"确认，`KPConsoleView.onUnmounted` 也不拆连接），模组页带 `from_room` query → 顶栏「返回 KP 控制台 / 返回大厅」，真正离开工作区时由 `useRoomReturn` 收尾拆连接。③ **按房间 token**——新表 `room_usage`（`scripts/migrate_47.py`）+ `usage_room()` ContextVar（引擎层绑定、provider 记账无需感知 room_id），`GET /rooms/{id}/usage`（kp_name 鉴权），设置面板「本场消耗」行（区别于「全局总账」）。④ **检定下放任意技能**——新模块 `rules/skills.py`（`base_expr` 解算：闪避=DEX/2、母语=EDU）+ `tools.resolve_skill_target`（卡上有→卡值；没有→技能表基础值），KP 面板下拉列「卡面技能 + 其余标准技能（基础值）」，payload 增 `base_value` 标记。⑤ **AI 检卡**（只建议不拦截）——`agent/card_review.py`（卡摘要 + `module_context.module_review_digest` 公开层模组设定 → 轻模型 → JSON，玩家名对齐过滤幻觉）+ `POST /rooms/{id}/card-review` + `CardReviewPanel.vue`。⑥ **技能创建上限**——通读规则书第三章全节确认**规则书未载明该上限**（6→7 版转换章节仅提"KP 可规定 75%"），故取 KP 裁定值 `SKILL_MAX_AT_CREATION = 90`（常量可回退 80）；`validate_allocation` 判定只针对"被点数推过上限"，母语=EDU 这类基础值超限不误报；建卡页加「合计」列与超限红字实时拦截。⑦ **阶段 6 重写**为 6 块（部署与分发 / UI 美化与移动端 / 健壮性 / 性能 / 安全收口 / 演示验收，3~4 天），补上 UI 美化与安全项。测试 271→292 全绿（新增 test_skill_cap.py、test_card_review.py 与工具/用量用例）+ vue-tsc 通过 | 用户 7 条反馈逐条闭环；未做项：检卡结果落库、按轮次明细、模组按幕裁剪 |
+| 2026-09-10 | **token 编排体检 + 缓存观测/可见性标注修复（AI 代写）**：① **前缀缓存可观测**——`llm_usage` 补 `cached_tokens`（`scripts/migrate_46.py` 增量迁移），`provider._cached_tokens()` 读 `usage.prompt_tokens_details.cached_tokens`，`get_usage()` 附 `cache_hit_rate`，设置面板改显「命中 N（命中率 X%）· 实际计费输入 = 名义 − 命中」（`cached` 落库前按 `prompt` 夹取）。实测（真实 provider 链路 2 次同前缀调用）：`cached_tokens` 0→1024，正好是 1024-token 最小缓存块；另测得 9275-token 真实房间提示词第 2 次命中 9216（99.4%）——即 `prompt_tokens` 只是名义输入。② **secret 可见性标注**——`assembler._session_line()` 统一渲染 L5 窗口行（协同/全自动共用），`secret=True` 打「·仅KP」+ 段头警示；`keeper/suggest._collect_context` 的 `latest_action` 改 `next((m for m in recent if not m.secret), '')`。根因：全自动每轮结尾必落一条 keeper 笔记（secret，与叙事同 channel），旧 `recent[0]` 会把 AI 自己的守秘笔记当成玩家行动喂回（实测 BP3 出现过「卡面无话术，已改用心理学…」）；而窗口混入 secret 且无标注时模型分不清玩家看过没有，D8 的**逐字**替换兜不住改写过的守秘内容。测试 266→271 全绿（新增 cached 夹取、窗口标注 ×2、latest_action 跳过 secret ×2）+ vue-tsc 通过 | 来源：用户追问"27.9 万 input 是否正常 / 能否省 token" → 全量体检（见 §6.1 两条增补）；同批记录待办：模组骨架按幕裁剪、模组与 clue/npc 表去重、TOOL_SCHEMAS 瘦身、MAX_TOOL_ROUNDS 5→3 |
 | 2026-09-10 | **阶段 5 浏览器端到端实测（chrome-devtools，AI 代写）**：① **上传**——`/modules` 拖拽弹窗上传 TXT（9950 字提取成功，自动跳详情页）；② **手动解析 + 选模型**——模型下拉实时探测出 52 个可用模型，显式选 `qwen3.8-max` 后点「开始解析」，状态机 pending→parsing（按钮禁用 + 已耗时计时）→ready；解析质量：3 幕（专家/旅人/挚友）、9 NPC、14 线索、3 时钟、3 结局、1 检定 + 8 条存疑提示，全字段与原文一致，`qwen3.8-max` 明显比 flash 更细（NPC 9 vs 5、线索 14 vs 6）；③ **房间挂载**——KP 台「模组骨架」面板换绑（辉质→雪盲），toast + 面板回显 + `module_changed` 广播系统行三处一致，注入链实测已切换（5138 字《雪盲》骨架，无 PDF 模组残留）；④ **协同模式**——建议文本用上了模组解析出的 **谢尔/英格堡、泪湖、金盏花** 三个要素，三条互不重复 + 检定提示，质量优；⑤ **全自动模式**——AI 一轮内发起 `request_check`（心理学·常规）**成功落地**（player 侧出现投掷按钮，P1 修复闭环）、公开叙事用到英格堡/合影/肩上霜，**玩家端零剧透**（检索不到 keeper 片段/兰莫丽芙家旧宅/寒灾时钟/仅KP 字样），keeper 笔记正确只进 KP 屏；⑥ **实测发现并修复**——`ModuleSelectPanel` 首次回显竞态：父视图 `KPConsoleView.onMounted` 是异步的（先 await getRoom 做 KP 守卫），子组件 onMounted 早于它执行时 `room.roomId` 仍为空串，`getRoom('')` 404 → 面板永久停在"未挂载"；改为 watch roomId（immediate，换房自动重载）后回显正常；⑦ 顺带实测到「删除被引用模组 → 自动解绑」：删掉正在挂载的模组后房间回退默认骨架，系统消息「挂载的模组已被删除，剧情骨架回退默认方案」落库 + 广播 | token 累计 64 次调用 / 27.9 万 input / 5.3 万 output；模组库最终留《雪盲》DOCX + 《八月二十二日》PDF 两份，房间 18408065 挂载《雪盲》 |
 | 2026-09-10 | **三模式浏览器实测后修复（AI 代写）**：① **工具 target 名不匹配（核心修复）**——真实现场「玩家昵称 ≠ 角色卡名」时，AI 会照抄【在场调查员】里的卡名当 target，request_check/san_check/update_status 全部报「不在房间内」，整轮检定下放落空。修法两层：提示词侧 keeper/suggest 的 investigators 补 `player_name`，assembler 抽出共用 `_investigator_line`（渲染「玩家昵称（职业｜角色名 X）」，BP3 与建议头部写明 target 必须填玩家昵称）；工具侧 `_load_member_card` 昵称查不到时按卡名反查兜底，并**归一成花名册昵称**返回与落库（check_request 的 payload.target 决定前端「谁能点投掷」）。② **存档列表鉴权补齐**——GET /rooms/{id}/saves 原漏 kp_name 校验（玩家可列存档名），改为 query 鉴权 403，前端 listSaves 透传。③ add_clue 的 keeper 回执「。，」标点修复（裁 content 尾标点 + 改「｜来源：」分隔）。测试 180→189 全绿 + vue-tsc 通过；真实模型回归（房间 18408065，玩家甲带卡 test）：全自动一轮 request_check 成功落地（target 归一为「玩家甲」），玩家点投掷 侦查 95→72 常规成功，AI 还自行回收了早前失败时记下的「伏笔#1 待办」 | 来源：三模式（纯人工/协同/全自动）浏览器实测报告；同批记录低危项：刷新页 pagehide→beacon leave 与重连 join 之间有 ~1s 花名册空缺窗口（enterRoom 幂等补行已兜底，仅竞态） |

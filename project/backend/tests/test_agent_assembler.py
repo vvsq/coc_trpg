@@ -58,6 +58,39 @@ def test_session_window_truncated_to_last_n():
     assert user.count('[p') == SESSION_WINDOW_SIZE
 
 
+def test_session_window_marks_keeper_only_rows():
+    """2026-09-10：secret 行（keeper 笔记 / 暗骰结果）必须标「·仅KP」。
+
+    它们与公开叙事同属 narrative 频道，不标注时模型分不清"玩家看过没有"；
+    D8 的逐字替换兜不住**改写过的**守秘内容，故靠标注让模型自己守住边界。
+    """
+    rows = [
+        {'sender': 'KP老王', 'role': 'kp', 'text': '仓库门吱呀打开。'},
+        {'sender': 'AI主持', 'role': 'kp',
+         'text': '伏笔#1：真相是船长私吞了货。', 'secret': True},
+        {'sender': '张三', 'role': 'player', 'text': '我举灯照向角落。'},
+    ]
+    user = build_suggestion_messages(_ctx(session_window=rows))[1]['content']
+    assert '[KP·KP老王] 仓库门吱呀打开。' in user
+    assert '[KP·AI主持·仅KP] 伏笔#1：真相是船长私吞了货。' in user
+    assert '标「·仅KP」的行玩家看不到' in user
+
+
+def test_auto_bp3_marks_keeper_only_rows():
+    """全自动 BP3 同一渲染（协同/全自动共用 _session_line，防两处漂移）。"""
+    from app.agent.assembler import AutoContext, build_auto_messages
+
+    ctx = AutoContext(session_window=[
+        {'sender': 'AI主持', 'role': 'kp', 'text': '暗骰结果：守夜人察觉了你。', 'secret': True},
+        {'sender': '张三', 'role': 'player', 'text': '我撬开铁柜。'},
+    ])
+    turn = next(m['content'] for m in build_auto_messages(ctx)
+                if m['content'].startswith('[本回合]'))
+    assert '[KP·AI主持·仅KP] 暗骰结果：守夜人察觉了你。' in turn
+    assert '[张三] 我撬开铁柜。' in turn
+    assert '公开叙事禁止引用其内容' in turn
+
+
 def test_investigator_line_shows_player_name_when_it_differs_from_card_name():
     """4.4 实测修复：工具 target 只认玩家昵称（room_member.player_name）。
 

@@ -22,11 +22,14 @@ from sqlmodel import Session, select
 
 from app.api.dice import DIFFICULTY_LABELS, LEVEL_LABELS
 from app.db import engine
-from app.models import Card, Clue, GameClock, Message, Npc, RoomMember, ScenarioState, Thread
+from app.models import (
+    Card, Clue, GameClock, Message, Npc, RoomMember, ScenarioState, SkillRow, Thread,
+)
 from app.rules import sanity
 from app.rules.coc7 import check as coc7_check
 from app.rules.coc7 import target_for
 from app.rules.dice import roll as roll_expr
+from app.rules.skills import base_expr_value
 from app.agent.state_ops import apply_scene_change, apply_status_change
 from app.tasks import spawn_background
 from app.ws.manager import build_envelope, manager
@@ -115,7 +118,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     'target': {'type': 'string',
                                'description': '调查员名字：填**玩家昵称**（【在场调查员】里括号外的那个，'
                                               '须在场且绑卡），不要填角色卡名'},
-                    'skill_name': {'type': 'string', 'description': '技能名（服务端按其角色卡查值）'},
+                    'skill_name': {'type': 'string',
+                                   'description': '标准技能名（如 聆听/侦查/闪避/图书馆使用）。'
+                                                  '服务端按角色卡查值，卡上没加过点的技能'
+                                                  '自动用技能表基础值（如 聆听 20、闪避 DEX/2），'
+                                                  '所以可以点名任何标准技能，不必只挑玩家练过的'},
                     'difficulty': {'type': 'string', 'enum': ['standard', 'hard', 'extreme'],
                                    'description': '难度：常规/困难/极难'},
                     'reason': {'type': 'string', 'description': '检定缘由与失败后果（必填，会展示给玩家）'},
@@ -479,6 +486,42 @@ def _skill_value(data: dict, skill_name: str) -> int | None:
     return None
 
 
+def _skill_base_from_table(session: Session, skill_name: str,
+                           attrs: dict | None) -> int | None:
+    """查技能表的**基础值**（卡上没有该技能时的检定目标值）。
+
+    同名多实例（技艺①②③、科学①②…）取首个有基础值的行；基础值可能是表达式
+    （闪避 = DEX/2、母语 = EDU），按角色属性解算后返回。查不到（自定义技能）返回 None。
+    """
+    rows = session.exec(select(SkillRow).where(SkillRow.name == skill_name)).all()
+    for row in rows:
+        if row.base is not None:
+            return int(row.base)
+    for row in rows:
+        value = base_expr_value(row.base_expr, attrs)
+        if value is not None:
+            return value
+    return None
+
+
+def resolve_skill_target(session: Session, data: dict, skill_name: str) -> tuple[int, bool] | None:
+    """检定目标值：卡上有该技能 → 卡面当前值；没有 → 技能表基础值。
+
+    返回 (值, 是否来自卡面)；两者都查不到（自定义技能）返回 None。
+    规则依据：任何技能都能尝试，没加点就是基础值（见 app/rules/skills.py）。
+
+    2026-09-10 修复：此前只用 `_skill_value`，导致 KP/AI 只能点名玩家已加点的
+    技能——「让所有人都投个聆听」这类最常见的检定直接报「技能表里没有该技能」。
+    """
+    card_value = _skill_value(data, skill_name)
+    if card_value is not None:
+        return card_value, True
+    base = _skill_base_from_table(session, skill_name, data.get('attributes') or {})
+    if base is None:
+        return None
+    return base, False
+
+
 # ==================== 工具执行器 ====================
 
 async def execute_tool(name: str, arguments: dict, room_id: str) -> str:
@@ -586,11 +629,13 @@ async def create_check_request(
     # （前端按 target === 我的昵称 判定），也必须与工具回执一致，否则 LLM
     # 会继续沿用卡名（4.4 实测：卡名≠昵称时玩家点不动按钮）。
     target = member.player_name
-    value = _skill_value(data, skill_name)
-    if value is None:
+    resolved = resolve_skill_target(session, data, skill_name)
+    if resolved is None:
         raise ValueError(
-            f'「{target}」的技能表里没有「{skill_name}」。请先查询其技能表'
+            f'技能表里没有「{skill_name}」。请改用标准技能名（如 聆听/侦查/闪避），'
+            f'或先用 get_card 查「{target}」的技能表'
         )
+    value, from_card = resolved
 
     request_id = uuid.uuid4().hex[:12]
     payload = {
@@ -598,6 +643,9 @@ async def create_check_request(
         'request_id': request_id, 'target': target,
         'skill_name': skill_name, 'difficulty': difficulty,
         'value': value, 'reason': reason[:200], 'fulfilled': False,
+        # 该值是否来自技能表基础值（卡上没加点）：KP 面板据此标注，避免误以为
+        # 玩家"练过"这个技能
+        'base_value': not from_card,
     }
     content = f'请 {target} 进行 {skill_name}（{DIFFICULTY_LABELS[difficulty]}）检定：{reason[:150]}'
     session.add(Message(
@@ -611,6 +659,7 @@ async def create_check_request(
     return {
         'status': 'requested', 'request_id': request_id, 'target': target,
         'skill': skill_name, 'value': value, 'difficulty': difficulty,
+        'value_source': 'base' if not from_card else 'card',
     }
 
 

@@ -10,7 +10,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getLlmStatus, probeLlmModels } from '@/api/agent'
+import { getLlmStatus, probeLlmModels, testLlm } from '@/api/agent'
 import { getModule, parseModule } from '@/api/modules'
 import type { ModuleDetail } from '@/types/module'
 
@@ -27,8 +27,43 @@ let pollTimer: number | undefined
 let tickTimer: number | undefined
 let pollFailures = 0
 
+// 连通性检测门禁（2026-09-10 用户反馈 #1）：解析会真花钱，先确认模型可用再允许点解析
+const testing = ref(false)
+const tested = ref(false)
+const testText = ref('')
+/** 当前全局配置摘要（只读）：改配置去大厅「API / 模型配置」或 KP 台设置 */
+const configSummary = ref('')
+
 const parsing = computed(() => props.module.parse_status === 'parsing')
 const defaultModelHint = ref('轻任务模型')
+
+/** 解析按钮门禁：必须检测通过，且当前没有任务在跑 */
+const canParse = computed(() => tested.value && !parsing.value && !submitting.value)
+
+async function checkModel(): Promise<void> {
+  testing.value = true
+  testText.value = ''
+  try {
+    const res = await testLlm()
+    tested.value = res.ok
+    if (res.ok) {
+      const light = res.light_model
+        ? `｜轻任务模型 ${res.light_model} ${res.light_ok === false ? '不通（' + (res.light_error ?? '') + '）' : '通'}`
+        : ''
+      testText.value = `可用：${res.model ?? ''} ${res.latency_ms ?? '-'}ms${light}`
+      ElMessage.success('模型可用，可以开始解析')
+    } else {
+      testText.value = `不可用：${res.error ?? '未知原因'}`
+      ElMessage.error(testText.value)
+    }
+  } catch {
+    // 拦截器已提示（网络层失败）
+    tested.value = false
+    testText.value = '检测请求失败'
+  } finally {
+    testing.value = false
+  }
+}
 
 function stopTimers(): void {
   if (pollTimer !== undefined) window.clearInterval(pollTimer)
@@ -68,6 +103,9 @@ onMounted(async () => {
   try {
     const status = await getLlmStatus()
     defaultModelHint.value = status.light_model || status.model || '未配置模型'
+    configSummary.value = [status.provider, status.model, status.base_url]
+      .filter(Boolean)
+      .join(' · ')
   } catch {
     // 状态拿不到不影响解析能力，仅提示文案退化
   }
@@ -122,23 +160,32 @@ async function trigger(): Promise<void> {
       >
         <el-option v-for="m in models" :key="m" :label="m" :value="m" />
       </el-select>
+      <el-button size="small" :loading="testing" @click="checkModel">检测模型</el-button>
       <el-button
         type="primary"
         size="small"
         :loading="submitting || parsing"
-        :disabled="parsing"
+        :disabled="!canParse"
         @click="trigger"
       >
         {{ module.parse_status === 'ready' ? '重新解析' : '开始解析' }}
       </el-button>
       <span v-if="parsing" class="elapsed">解析中… 已耗时 {{ elapsed }}s</span>
+      <el-tag v-else-if="tested" type="success" size="small">已检测可用</el-tag>
       <span v-else-if="module.parsed_at" class="elapsed">
         上次解析：{{ module.parse_model || '默认模型' }}
       </span>
     </div>
 
+    <p v-if="testText" class="test-result" :class="tested ? 'is-ok' : 'is-bad'">
+      {{ testText }}
+    </p>
+
     <p class="hint">
       解析会真实调用 LLM 并消耗 token，因此上传后不会自动触发；长模组会分块解析，耗时可能数分钟。
+      <br />
+      当前全局配置：{{ configSummary || '未配置' }}（改配置去大厅「API / 模型配置」或 KP 台设置）。
+      <strong>先点「检测模型」确认可用，才能开始解析。</strong>
     </p>
 
     <el-alert
@@ -187,6 +234,20 @@ async function trigger(): Promise<void> {
   font-size: 12px;
   color: #909399;
   line-height: 1.6;
+}
+
+.test-result {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.test-result.is-ok {
+  color: #67c23a;
+}
+
+.test-result.is-bad {
+  color: #f56c6c;
 }
 
 .err {

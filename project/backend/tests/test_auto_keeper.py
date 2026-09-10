@@ -181,6 +181,33 @@ def test_bp_layout_messages(env, monkeypatch):
     assert fake.calls[0]['tools']  # 工具 schema 随请求下发
 
 
+def test_secret_rows_marked_and_excluded_from_latest_action(env, monkeypatch):
+    """2026-09-10：secret 行不得充当【最新剧情推进】，但要在窗口里标「·仅KP」。
+
+    真实踩坑：全自动每轮结尾都会落一条 keeper 笔记（secret=True，与叙事同
+    channel），旧的 `recent[0].content` 会把 AI 自己的守秘笔记当成玩家行动
+    喂回去（实测 BP3 里出现过「卡面无话术，已改用心理学…」）。
+    """
+    engine, rid = env
+    with Session(engine) as s:
+        s.add(Message(room_id=rid, channel='narrative', sender='张三',
+                      content='我举灯照向帆布下的货箱。', payload={'role': 'player'}))
+        s.add(Message(room_id=rid, channel='narrative', sender='AI主持',
+                      content='keeper 笔记：货箱里其实只有压舱石，真正的文物在船底夹层。',
+                      secret=True, payload={'role': 'kp'}))
+        s.commit()
+
+    fake = FakeAutoClient([AssistantTurn(content=GOOD_FINAL)])
+    monkeypatch.setattr(keeper_mod, 'get_client', lambda: fake)
+    asyncio.run(auto_keeper.run_turn(rid))
+
+    turn = fake.calls[0]['messages'][3]['content']  # BP3 本回合
+    assert '【最新剧情推进】我举灯照向帆布下的货箱。' in turn
+    assert '【最新剧情推进】keeper 笔记' not in turn
+    assert '[KP·AI主持·仅KP] keeper 笔记' in turn          # 窗口内显式标注
+    assert '标「·仅KP」的行玩家看不到' in turn
+
+
 # ---------- 失败与降级 ----------
 
 def test_three_failures_fallback_manual(env, monkeypatch):
