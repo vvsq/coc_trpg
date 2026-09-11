@@ -4,17 +4,23 @@
  * 两个入口：KP 创建房间（拿 8 位短码）/ 玩家加入房间（输短码选卡进房）。
  * 下方展示等待中的房间列表，可直接点加入。
  */
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createRoom, joinRoom, listRooms } from '@/api/rooms'
 import { listCards, type CardListItem } from '@/api/cards'
 import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
+import LlmFirstRunGuide from '@/components/LlmFirstRunGuide.vue'
 import type { RoomListItem, WsMember } from '@/types/ws'
 
 const router = useRouter()
 /** 全局 API / 模型配置弹窗（详细设置页；房间与模组页只做只读回显） */
 const settingsVisible = ref(false)
+/** 首次配置引导条（6.1）：设置弹窗关掉后重新检测配置状态 */
+const guideRef = ref<{ refresh: () => void } | null>(null)
+watch(settingsVisible, (open) => {
+  if (!open) guideRef.value?.refresh()
+})
 
 // ---------- 建房 ----------
 const createVisible = ref(false)
@@ -95,6 +101,9 @@ onMounted(refreshRooms)
   <main class="home">
     <h1 class="home-title">雾都疑云 · CoC 跑团助手</h1>
     <p class="home-sub">创建房间开启调查，或输入房间号加入一场正在进行的故事</p>
+
+    <!-- 首次配置引导（6.1）：未配 LLM 时提示可一键进演示模式，不挡开团 -->
+    <LlmFirstRunGuide ref="guideRef" @configure="settingsVisible = true" />
 
     <!-- 全局 LLM / API 配置入口（2026-09-10 用户反馈 #1）：配置是全局的，
          所以把详细设置页放在大厅；房间与模组页只做只读回显 + 检测门禁 -->

@@ -2,10 +2,12 @@
 
 局域网联机 CoC（克苏鲁的呼唤·七版）跑团 Web 应用：1 名 KP + 2~4 名玩家在浏览器里即开即玩。
 能力：七版规则建卡与检定、房间实时联机（WS + 心跳重连 + 存档续玩）、双聊天框（剧情 / 闲聊分离）、
-**双模式主持**（AI 全自动 / AI 协助真人 KP）、模组解析（规划中）。
+**双模式主持**（AI 全自动 / AI 协助真人 KP）、模组解析（上传 → 结构化 → 挂载驱动剧情）。
 
-- 总控/任务清单：`goal.md`（按 checkbox 推进，阶段 0~4 已完成）
+- 总控/任务清单：`goal.md`（按 checkbox 推进，阶段 0~5 已完成，阶段 6 打磨与演示进行中）
+- **一键启动**：双击根目录 `start.bat`（单端口 8000 托管前后端，见 `docs/部署文档.md`）
 - 规则笔记：`docs/coc7-rules.md`；项目简介：`docs/项目描述.md`
+- 文档：**`docs/部署文档.md`**（10 分钟跑起来 / 局域网开团 / FAQ）、**`docs/使用说明.md`**（KP 与玩家操作）
 - 前端 Vue3 + Vite + TS + Pinia + Element Plus；后端 FastAPI + SQLModel(SQLite)；LLM 走 OpenAI 兼容协议（GLM / DeepSeek / 千问 / OpenAI 可切换，无 key 可降级纯人工或 Mock 演示）
 
 ## 目录结构
@@ -16,7 +18,7 @@
 ├── docs/                 # 规则笔记、项目简介
 └── project/
     ├── frontend/         # Vue3 前端（npm）
-    └── backend/          # FastAPI 后端（venv + pip）
+    └── backend/          # FastAPI 后端（.venv + pip）
         ├── app/          # main.py / api / ws / rules(规则引擎) / llm / agent(提示词与记忆) / models / seed
         ├── scripts/      # init_db / migrate_44 / parse_seed_data 等
         └── tests/        # pytest
@@ -27,17 +29,28 @@
 - Node.js ≥ 22（前端 `package.json` engines 要求 `^22.18.0 || >=24.12.0`）
 - Python ≥ 3.11
 
+## 一键启动（推荐，单端口）
+
+Windows 下双击根目录 **`start.bat`**：自动检测 Python/Node → 建 `.venv` 装依赖 → 补 `.env`
+→ 建库或补增量迁移 → 构建前端 → 起后端（**前端产物由后端单端口托管**，只用 8000 一个端口）
+→ 打印局域网地址并打开浏览器。参数：`start.bat 8080` / `--rebuild` / `--check`。
+
+细节、局域网开团与排错见 **`docs/部署文档.md`**。
+
 ## 本地启动（开发模式，前后端两个终端）
+
+> 开发时前端走 Vite（5173）并用代理转发 `/api` 与 `/ws` 到后端，改代码热更新最快。
+> 非开发场景请用上面的一键启动（单端口）。
 
 ### 1) 后端（端口 8000）
 
 ```bash
 cd project/backend
-python -m venv venv
+python -m venv .venv
 # Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 # Mac/Linux:
-# source venv/bin/activate
+# source .venv/bin/activate
 
 pip install -r requirements.txt
 

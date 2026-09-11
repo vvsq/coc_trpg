@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import cards, dice, kp, modules, rooms, suggestions
+from app.static_hosting import mount_spa
 from app.ws import rooms as ws_rooms
 
 
@@ -38,3 +39,8 @@ app.include_router(suggestions.router, prefix='/api')
 app.include_router(modules.router, prefix='/api')
 # WS 路由不带 /api 前缀：路径即 /ws/{room_id}
 app.include_router(ws_rooms.router)
+
+# 阶段 6.1（D6）：单端口托管前端构建产物。必须在所有 API/WS 路由注册之后调用，
+# 通配路由才不会抢在它们前面；dist 不存在（开发模式 / 未构建）时静默跳过。
+if mount_spa(app):
+    print(f"[static] 已托管前端产物: {app.state.spa_dist_dir}")
