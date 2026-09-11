@@ -102,7 +102,7 @@ defineExpose({ refresh })
 }
 
 .guide-text span {
-  color: #c0c4cc;
+  color: var(--coc-text-dim);
 }
 
 .guide-text em {

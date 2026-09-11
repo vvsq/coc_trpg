@@ -1,16 +1,23 @@
 <script setup lang="ts">
 /**
- * 大厅首页 — 阶段 3.1。
- * 两个入口：KP 创建房间（拿 8 位短码）/ 玩家加入房间（输短码选卡进房）。
- * 下方展示等待中的房间列表，可直接点加入。
+ * 大厅首页 — 阶段 3.1；6.2⑧ 按样例图重排信息层级。
+ *
+ * 首屏只留两个主操作（创建房间 / 加入房间），次级入口（角色管理 / 模组库 /
+ * API 与模型配置）收成一行快捷链接；等待中的房间列表补齐三态
+ * （骨架屏 / 空态 / 错误态 + 重试），不再"加载失败就一片空白"。
+ *
+ * 业务逻辑零改动：建房 / 加入 / 列表 / 首次配置引导与弹窗行为与重排前一致。
  */
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createRoom, joinRoom, listRooms } from '@/api/rooms'
 import { listCards, type CardListItem } from '@/api/cards'
 import LlmSettingsDialog from '@/components/LlmSettingsDialog.vue'
 import LlmFirstRunGuide from '@/components/LlmFirstRunGuide.vue'
+import CocIcon from '@/components/common/CocIcon.vue'
+import StateView from '@/components/common/StateView.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import type { RoomListItem, WsMember } from '@/types/ws'
 
 const router = useRouter()
@@ -83,14 +90,21 @@ async function doJoin() {
   })
 }
 
-// ---------- 等待中的房间 ----------
+// ---------- 等待中的房间（三态：骨架 / 空 / 错误+重试） ----------
 const rooms = ref<RoomListItem[]>([])
+const roomsLoading = ref(true)
+const roomsError = ref('')
 
 async function refreshRooms() {
+  roomsLoading.value = true
+  roomsError.value = ''
   try {
     rooms.value = await listRooms()
   } catch {
-    /* 静默：列表加载失败不弹窗，点刷新再看 */
+    // 列表加载失败不弹窗（拦截器已提示一次），页面上给可重试的错误态
+    roomsError.value = '房间列表加载失败，请确认后端服务仍在运行'
+  } finally {
+    roomsLoading.value = false
   }
 }
 
@@ -98,43 +112,100 @@ onMounted(refreshRooms)
 </script>
 
 <template>
-  <main class="home">
-    <h1 class="home-title">雾都疑云 · CoC 跑团助手</h1>
-    <p class="home-sub">创建房间开启调查，或输入房间号加入一场正在进行的故事</p>
+  <main class="home coc-page">
+    <section class="hero">
+      <h1 class="hero-title">COC 跑团助手</h1>
+      <p class="hero-sub">创建房间开启调查，或输入房间号加入一场正在进行的故事</p>
 
-    <!-- 首次配置引导（6.1）：未配 LLM 时提示可一键进演示模式，不挡开团 -->
-    <LlmFirstRunGuide ref="guideRef" @configure="settingsVisible = true" />
+      <!-- 首次配置引导（6.1）：未配 LLM 时提示可一键进演示模式，不挡开团 -->
+      <LlmFirstRunGuide ref="guideRef" @configure="settingsVisible = true" />
 
-    <!-- 全局 LLM / API 配置入口（2026-09-10 用户反馈 #1）：配置是全局的，
-         所以把详细设置页放在大厅；房间与模组页只做只读回显 + 检测门禁 -->
-    <div class="home-tools">
-      <el-button size="small" plain @click="settingsVisible = true">API / 模型配置</el-button>
-    </div>
+      <div class="entries">
+        <button type="button" class="entry entry--kp coc-glow-hover" @click="createVisible = true">
+          <span class="entry-icon">
+            <CocIcon name="shield" :size="24" />
+          </span>
+          <span class="entry-body">
+            <span class="entry-title">创建房间</span>
+            <span class="entry-desc">作为守秘人（KP）开团，拿到房间短码分发给玩家</span>
+          </span>
+          <CocIcon name="chevronRight" :size="16" />
+        </button>
 
-    <div class="entries">
-      <div class="entry-card entry-card--kp" @click="createVisible = true">
-        <span class="entry-icon">🎭</span>
-        <h2>创建房间</h2>
-        <p>作为守秘人（KP）开团，获得房间短码分发给玩家</p>
+        <button type="button" class="entry entry--player coc-glow-hover" @click="openJoin()">
+          <span class="entry-icon">
+            <CocIcon name="dice" :size="24" />
+          </span>
+          <span class="entry-body">
+            <span class="entry-title">加入房间</span>
+            <span class="entry-desc">输入 8 位房间短码，带上你的调查员卡入场</span>
+          </span>
+          <CocIcon name="chevronRight" :size="16" />
+        </button>
       </div>
-      <div class="entry-card entry-card--player" @click="openJoin()">
-        <span class="entry-icon">🔍</span>
-        <h2>加入房间</h2>
-        <p>输入 8 位房间短码，带上你的调查员卡入场</p>
-      </div>
-    </div>
 
-    <section class="lobby">
-      <div class="lobby-head">
-        <h3>等待中的房间</h3>
-        <el-button text type="primary" @click="refreshRooms">刷新</el-button>
-      </div>
-      <el-empty v-if="rooms.length === 0" description="还没有等待中的房间" :image-size="72" />
-      <div v-for="r in rooms" :key="r.room_id" class="room-row">
-        <span class="lobby-code">{{ r.room_id }}</span>
-        <span class="lobby-name">{{ r.name }}</span>
-        <span class="lobby-kp">KP：{{ r.kp_name }}</span>
-        <el-button size="small" type="primary" plain @click="openJoin(r.room_id)">加入</el-button>
+      <!-- 次级入口：不抢首屏注意力，但一眼能找到 -->
+      <nav class="quick-links">
+        <RouterLink class="quick-link" :to="{ name: 'card-list' }">
+          <CocIcon name="card" :size="13" />
+          角色管理
+        </RouterLink>
+        <RouterLink class="quick-link" :to="{ name: 'module-list' }">
+          <CocIcon name="book" :size="13" />
+          模组库
+        </RouterLink>
+        <RouterLink class="quick-link" :to="{ name: 'settings' }">
+          <CocIcon name="gear" :size="13" />
+          系统设置
+        </RouterLink>
+        <button type="button" class="quick-link" @click="settingsVisible = true">
+          <CocIcon name="sparkles" :size="13" />
+          API / 模型配置
+        </button>
+      </nav>
+    </section>
+
+    <section class="lobby coc-panel">
+      <header class="coc-panel-head">
+        <h3 class="coc-panel-title">
+          <CocIcon name="clock" :size="15" />
+          等待中的房间
+        </h3>
+        <button type="button" class="refresh-btn" :disabled="roomsLoading" @click="refreshRooms">
+          <CocIcon name="refresh" :size="13" :class="{ 'coc-spin': roomsLoading }" />
+          刷新
+        </button>
+      </header>
+
+      <div class="coc-panel-body">
+        <SkeletonBlock v-if="roomsLoading" variant="row" :count="2" :rows="1" />
+
+        <StateView
+          v-else-if="roomsError"
+          compact
+          state="error"
+          title="加载失败"
+          :description="roomsError"
+        >
+          <el-button size="small" type="primary" plain @click="refreshRooms">重试</el-button>
+        </StateView>
+
+        <StateView
+          v-else-if="rooms.length === 0"
+          compact
+          state="empty"
+          title="还没有等待中的房间"
+          description="创建一个房间，或者让 KP 把房间号发给你"
+        />
+
+        <div v-else class="room-list">
+          <div v-for="r in rooms" :key="r.room_id" class="room-row">
+            <span class="room-code coc-mono">{{ r.room_id }}</span>
+            <span class="room-name">{{ r.name }}</span>
+            <span class="room-kp">KP：{{ r.kp_name }}</span>
+            <el-button size="small" type="primary" plain @click="openJoin(r.room_id)">加入</el-button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -185,136 +256,226 @@ onMounted(refreshRooms)
       </template>
     </el-dialog>
 
-    <!-- 全局 API / 模型配置（与 KP 台同一个组件：供应商/Key/模型/超时/轻任务模型/Token 总账） -->
+    <!-- 全局 API / 模型配置（与设置页同一个组件：供应商/Key/模型/超时/轻任务模型/Token 总账） -->
     <LlmSettingsDialog v-model:visible="settingsVisible" />
   </main>
 </template>
 
 <style scoped>
 .home {
-  min-height: 100vh;
-  padding: 48px 24px;
-  background:
-    radial-gradient(ellipse at 20% 0%, rgba(44, 62, 80, 0.55), transparent 55%),
-    radial-gradient(ellipse at 85% 100%, rgba(155, 89, 182, 0.18), transparent 50%),
-    #1b2431;
-  color: #e8eaed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--coc-sp-6);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--coc-sp-8) var(--coc-sp-5) var(--coc-sp-10);
+}
+
+/* ---------- 首屏 ---------- */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.home-title {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 600;
+.hero-title {
+  font-size: var(--coc-fs-2xl);
   letter-spacing: 2px;
+  color: var(--coc-text-strong);
 }
 
-.home-tools {
-  display: flex;
-  justify-content: center;
-  margin: -18px 0 26px;
-}
-
-.home-sub {
-  margin: 10px 0 36px;
-  color: #909399;
-  font-size: 14px;
+.hero-sub {
+  margin-top: var(--coc-sp-2);
+  font-size: var(--coc-fs-base);
+  color: var(--coc-text-muted);
 }
 
 .entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--coc-sp-4);
+  width: 100%;
+  max-width: 720px;
+  margin-top: var(--coc-sp-6);
+}
+
+.entry {
   display: flex;
-  justify-content: center;
-  gap: 24px;
-}
-
-.entry-card {
-  width: 260px;
-  padding: 28px 20px;
-  border-radius: 12px;
-  border: 1px solid #2c3e50;
-  background: #222d3d;
+  align-items: center;
+  gap: var(--coc-sp-3);
+  padding: var(--coc-sp-4);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-lg);
+  background: rgba(22, 32, 50, 0.72);
+  color: var(--coc-text);
+  font-family: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-.entry-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+.entry--kp:hover {
+  border-color: rgba(230, 162, 60, 0.5);
+  box-shadow: var(--coc-glow-brand);
 }
 
-.entry-card--kp:hover {
-  border-color: #e6a23c;
-}
-
-.entry-card--player:hover {
-  border-color: #9b59b6;
+.entry--player:hover {
+  border-color: var(--coc-border-glow);
+  box-shadow: var(--coc-glow);
 }
 
 .entry-icon {
-  font-size: 34px;
-}
-
-.entry-card h2 {
-  margin: 12px 0 8px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.entry-card p {
-  margin: 0;
-  font-size: 13px;
-  color: #909399;
-  line-height: 1.6;
-}
-
-.lobby {
-  max-width: 640px;
-  margin: 44px auto 0;
-  text-align: left;
-}
-
-.lobby-head {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius);
+  background: var(--coc-card-2);
+  color: var(--coc-accent);
 }
 
-.lobby-head h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #e6a23c;
+.entry--kp .entry-icon {
+  border-color: rgba(230, 162, 60, 0.4);
+  background: var(--coc-brand-soft);
+  color: var(--coc-brand);
+}
+
+.entry-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.entry-title {
+  font-size: var(--coc-fs-md);
+  font-weight: 600;
+  color: var(--coc-text-strong);
+}
+
+.entry-desc {
+  font-size: var(--coc-fs-xs);
+  line-height: 1.6;
+  color: var(--coc-text-muted);
+}
+
+/* ---------- 次级入口 ---------- */
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--coc-sp-2);
+  margin-top: var(--coc-sp-5);
+}
+
+.quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-full);
+  background: rgba(22, 32, 50, 0.6);
+  color: var(--coc-text-muted);
+  font-family: inherit;
+  font-size: var(--coc-fs-sm);
+  cursor: pointer;
+  transition: color var(--coc-dur-fast) var(--coc-ease), border-color var(--coc-dur-fast) var(--coc-ease);
+}
+
+.quick-link:hover {
+  border-color: var(--coc-border-glow);
+  color: var(--coc-accent);
+}
+
+/* ---------- 等待中的房间 ---------- */
+.lobby {
+  width: 100%;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-sm);
+  background: transparent;
+  color: var(--coc-text-muted);
+  font-family: inherit;
+  font-size: var(--coc-fs-xs);
+  cursor: pointer;
+  transition: color var(--coc-dur-fast) var(--coc-ease), border-color var(--coc-dur-fast) var(--coc-ease);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  border-color: var(--coc-border-glow);
+  color: var(--coc-accent);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--coc-sp-2);
 }
 
 .room-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  margin-top: 10px;
-  background: #222d3d;
-  border: 1px solid #2c3e50;
-  border-radius: 8px;
+  gap: var(--coc-sp-3);
+  padding: 10px var(--coc-sp-3);
+  border: 1px solid var(--coc-border-soft);
+  border-radius: var(--coc-radius);
+  background: var(--coc-card-2);
+  transition: border-color var(--coc-dur-fast) var(--coc-ease);
 }
 
-.lobby-code {
+.room-row:hover {
+  border-color: var(--coc-border-glow);
+}
+
+.room-code {
   font-weight: 600;
-  letter-spacing: 3px;
-  color: #e6a23c;
+  letter-spacing: 2px;
+  color: var(--coc-brand);
 }
 
-.lobby-name {
+.room-name {
   flex: 1;
-  font-size: 14px;
+  min-width: 0;
+  font-size: var(--coc-fs-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.lobby-kp {
-  font-size: 13px;
-  color: #909399;
+.room-kp {
+  font-size: var(--coc-fs-sm);
+  color: var(--coc-text-muted);
 }
 
 /* 房间号输入自动大写 */
 .code-input :deep(input) {
   text-transform: uppercase;
   letter-spacing: 3px;
+}
+
+@media (max-width: 720px) {
+  .home {
+    padding: var(--coc-sp-5) var(--coc-sp-3) var(--coc-sp-8);
+  }
+
+  .hero-title {
+    font-size: var(--coc-fs-xl);
+  }
 }
 </style>

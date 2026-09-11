@@ -133,7 +133,7 @@ async function run(): Promise<void> {
 
 .done {
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .hint,
@@ -189,7 +189,7 @@ async function run(): Promise<void> {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.6;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .issue-advice {

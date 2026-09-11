@@ -217,7 +217,7 @@ async function trigger(): Promise<void> {
 
 .label {
   font-size: 13px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .model-select {
@@ -232,7 +232,7 @@ async function trigger(): Promise<void> {
 .hint {
   margin: 8px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
   line-height: 1.6;
 }
 

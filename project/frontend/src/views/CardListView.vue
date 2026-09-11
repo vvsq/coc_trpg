@@ -1,21 +1,37 @@
 <script setup lang="ts">
+/**
+ * 角色卡列表 — 阶段 2；6.2⑨ 补三态（骨架 / 空 / 错误+重试）并统一暗色观感。
+ *
+ * 逻辑零改动：列表 / 新建 / 查看 / 删除（confirm + 刷新）与原先一致。
+ */
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listCards, deleteCard } from '@/api/cards'
 import { eraLabel } from '@/types/investigator'
+import CocIcon from '@/components/common/CocIcon.vue'
+import StateView from '@/components/common/StateView.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 
 const router = useRouter()
 const cards = ref<Awaited<ReturnType<typeof listCards>>>([])
 const loading = ref(true)
+const error = ref('')
 
-onMounted(async () => {
+async function load(): Promise<void> {
+  loading.value = true
+  error.value = ''
   try {
     cards.value = await listCards()
+  } catch {
+    // 拦截器已提示一次，页面上给可重试的错误态
+    error.value = '角色卡列表加载失败，请确认后端服务仍在运行'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 
 async function onDelete(row: { id: string; name: string }) {
   try {
@@ -29,18 +45,42 @@ async function onDelete(row: { id: string; name: string }) {
   }
   await deleteCard(row.id)
   ElMessage.success('已删除')
-  cards.value = await listCards()
+  await load()
 }
 </script>
 
 <template>
-  <div class="card-list">
-    <div class="header">
-      <h2>角色卡列表</h2>
-      <el-button type="primary" @click="router.push('/cards/new')">新建角色卡</el-button>
-    </div>
+  <main class="card-list coc-page">
+    <header class="page-head">
+      <div>
+        <h2 class="page-title">
+          <CocIcon name="card" :size="20" />
+          角色卡列表
+        </h2>
+        <p class="page-sub">按 CoC 七版规则建卡，房间内可直接检定与改状态</p>
+      </div>
+      <el-button type="primary" @click="router.push('/cards/new')">
+        <CocIcon name="sparkles" :size="14" />
+        新建角色卡
+      </el-button>
+    </header>
 
-    <el-table v-loading="loading" :data="cards" border>
+    <SkeletonBlock v-if="loading" variant="row" :count="3" :rows="1" />
+
+    <StateView v-else-if="error" state="error" title="加载失败" :description="error">
+      <el-button size="small" type="primary" plain @click="load">重试</el-button>
+    </StateView>
+
+    <StateView
+      v-else-if="cards.length === 0"
+      state="empty"
+      title="还没有角色卡"
+      description="点右上角「新建角色卡」走一遍三步建卡向导"
+    >
+      <el-button size="small" type="primary" @click="router.push('/cards/new')">开始建卡</el-button>
+    </StateView>
+
+    <el-table v-else :data="cards" border class="card-table">
       <el-table-column prop="name" label="姓名" />
       <el-table-column prop="occupation" label="职业" />
       <el-table-column prop="era" label="时代" width="140">
@@ -53,58 +93,51 @@ async function onDelete(row: { id: string; name: string }) {
         </template>
       </el-table-column>
     </el-table>
-
-    <el-empty v-if="!loading && cards.length === 0" description="还没有角色卡，点右上角新建一张" />
-  </div>
+  </main>
 </template>
 
 <style scoped>
 .card-list {
-  max-width: 960px;
-  margin: 32px auto;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.header {
   display: flex;
+  flex-direction: column;
+  gap: var(--coc-sp-4);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--coc-sp-6) var(--coc-sp-5) var(--coc-sp-8);
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: var(--coc-sp-4);
+  padding-bottom: var(--coc-sp-3);
+  border-bottom: 1px solid var(--coc-border);
+}
+
+.page-title {
+  display: flex;
   align-items: center;
-  margin-bottom: 20px;
+  gap: var(--coc-sp-2);
+  color: var(--coc-text-strong);
 }
 
-.header h2 {
-  margin: 0;
-  font-size: 22px;
-  color: #1f2937;
-  font-weight: 600;
+.page-title .coc-icon-svg {
+  color: var(--coc-accent);
 }
 
-/* 深度修改element-plus表格样式，scoped需要:deep() */
-:deep(.el-table) {
-  border-radius: 12px;
-  overflow: hidden;
-}
-:deep(.el-table th) {
-  background-color: #f7f8fa;
-  color: #4e5969;
-  font-weight: 600;
-}
-:deep(.el-table .el-table__row:hover > td) {
-  background-color: #f2f7ff !important;
-}
-:deep(.el-table .el-table__row:nth-child(even) > td) {
-  background-color: #fbfcfe;
-}
-:deep(.el-table__cell) {
-  padding: 14px 16px;
+.page-sub {
+  margin-top: 6px;
+  font-size: var(--coc-fs-sm);
+  color: var(--coc-text-muted);
 }
 
-/* 空状态间距 */
-:deep(.el-empty) {
-  margin: 40px 0 20px;
+/* 表格观感走 global.css 的 EP 变量映射，这里只补圆角与行高 */
+.card-table {
+  width: 100%;
 }
 
+.card-table :deep(.el-table) {
+  border-radius: var(--coc-radius-lg);
+}
 </style>

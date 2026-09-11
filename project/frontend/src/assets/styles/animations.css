@@ -1,0 +1,311 @@
+/**
+ * 动效库 — 阶段 6.2 第 ①/⑧ 项。
+ *
+ * 只做"细腻微动效"，且全部使用 transform / opacity / box-shadow（合成层友好，不触发布局）。
+ * 关闭开关：documentElement 上的 `coc-reduce-motion` 类（设置页「动效」开关写入），
+ * 同时尊重系统 `prefers-reduced-motion: reduce`。
+ *
+ * 命名约定：keyframes 前缀 `coc-`，避免与组件内历史 keyframes（roll-pop / roll-pulse）冲突。
+ */
+
+/* ==========================================================================
+   1. 路由切换过渡（§6.2⑧：换页淡入 + 轻微上浮）
+   ========================================================================== */
+
+.coc-route-enter-active {
+  transition: opacity var(--coc-dur) var(--coc-ease), transform var(--coc-dur) var(--coc-ease);
+}
+
+.coc-route-leave-active {
+  transition: opacity var(--coc-dur-fast) var(--coc-ease);
+}
+
+.coc-route-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.coc-route-leave-to {
+  opacity: 0;
+}
+
+/* ==========================================================================
+   2. 元素入场（面板 / 卡片 / 消息依次缓入，借鉴 ui-example「元素依次缓入」手法）
+   ========================================================================== */
+
+@keyframes coc-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes coc-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes coc-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes coc-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes coc-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.coc-enter-fade {
+  animation: coc-fade-in var(--coc-dur) var(--coc-ease) both;
+}
+
+.coc-enter-up {
+  animation: coc-fade-up var(--coc-dur) var(--coc-ease) both;
+}
+
+.coc-enter-left {
+  animation: coc-slide-in-left var(--coc-dur) var(--coc-ease) both;
+}
+
+.coc-enter-right {
+  animation: coc-slide-in-right var(--coc-dur) var(--coc-ease) both;
+}
+
+.coc-enter-pop {
+  animation: coc-scale-in var(--coc-dur) var(--coc-ease) both;
+}
+
+/* 依次缓入的阶梯延迟（面板组常用，最多 8 级） */
+.coc-stagger > * {
+  animation: coc-fade-up var(--coc-dur-slow) var(--coc-ease) both;
+}
+
+.coc-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.coc-stagger > *:nth-child(2) { animation-delay: 55ms; }
+.coc-stagger > *:nth-child(3) { animation-delay: 110ms; }
+.coc-stagger > *:nth-child(4) { animation-delay: 165ms; }
+.coc-stagger > *:nth-child(5) { animation-delay: 220ms; }
+.coc-stagger > *:nth-child(6) { animation-delay: 275ms; }
+.coc-stagger > *:nth-child(7) { animation-delay: 330ms; }
+.coc-stagger > *:nth-child(8) { animation-delay: 385ms; }
+
+/* ==========================================================================
+   3. 消息流（§6.2⑦：新消息淡入、骰子徽章弹跳与光晕）
+   ========================================================================== */
+
+@keyframes coc-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes coc-roll-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) rotate(-3deg);
+  }
+
+  60% {
+    transform: scale(1.04) rotate(1deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes coc-roll-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--coc-pulse-rgb, 34, 211, 238), 0);
+  }
+
+  50% {
+    box-shadow: 0 0 calc(16px * var(--coc-glow-strength)) 3px rgba(var(--coc-pulse-rgb, 34, 211, 238), 0.55);
+  }
+}
+
+.coc-msg-in {
+  animation: coc-msg-in var(--coc-dur) var(--coc-ease) both;
+}
+
+.coc-roll-in {
+  animation: coc-roll-pop 0.26s var(--coc-ease) both;
+}
+
+/* 大成功 / 大失败：弹跳后接两轮呼吸光晕（色值由内联 --coc-pulse-rgb 注入） */
+.coc-roll-in--epic {
+  animation: coc-roll-pop 0.26s var(--coc-ease) both,
+    coc-roll-pulse 1.2s ease-in-out 0.26s 2;
+}
+
+/* ==========================================================================
+   4. 面板发光与边框流光（§6.2⑦：静态页也有"活着"的观感）
+   ========================================================================== */
+
+@keyframes coc-glow-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 calc(12px * var(--coc-glow-strength)) rgba(34, 211, 238, 0.12);
+  }
+
+  50% {
+    box-shadow: 0 0 calc(24px * var(--coc-glow-strength)) rgba(34, 211, 238, 0.26);
+  }
+}
+
+/** 边框流光：用背景渐变沿描边循环位移（不触发布局） */
+@keyframes coc-border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.coc-glow-breathe {
+  animation: coc-glow-breathe 3.6s ease-in-out infinite;
+}
+
+/** 顶部/底部一条流动高光，用于重点面板（仅 KP 台与重要信息卡） */
+.coc-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--coc-border-glow) 35%,
+    var(--coc-accent) 50%,
+    var(--coc-border-glow) 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: coc-border-flow 3.2s linear infinite;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   5. 背景氛围层（默认关闭；开启时缓慢漂浮，pointer-events: none）
+   ========================================================================== */
+
+@keyframes coc-ambient-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: translate3d(2%, -2%, 0) scale(1.06);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.55;
+  }
+}
+
+.coc-ambient-drift {
+  animation: coc-ambient-drift 24s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   7. 骨架屏与转圈（§6.2⑨ 三态的加载态）
+   —— 骨架块用背景渐变流光（只动 background-position，不触发布局）
+   ========================================================================== */
+
+@keyframes coc-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.coc-shimmer {
+  background: linear-gradient(90deg, var(--coc-card-2) 25%, var(--coc-card-3) 37%, var(--coc-card-2) 63%);
+  background-size: 200% 100%;
+  animation: coc-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes coc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.coc-spin {
+  animation: coc-spin 1s linear infinite;
+}
+
+/* ==========================================================================
+   8. 降级开关：设置页动效开关 + 系统 reduced-motion
+   ========================================================================== */
+
+html.coc-reduce-motion *,
+html.coc-reduce-motion *::before,
+html.coc-reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

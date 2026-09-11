@@ -1,0 +1,557 @@
+/**
+ * 全局样式地基 — 阶段 6.2 第 ① 项。
+ *
+ * 职责：
+ *   1. 最小化重置 + body 底色 + 滚动条 + 选区 + 排版基线
+ *   2. Element Plus 暗色主题变量映射（--el-* → --coc-*），此后组件内不再写 :deep()/!important
+ *   3. 全站通用工具类（面板 / 卡片 / 标题 / 滚动区 / 发光悬停）
+ *
+ * 引入顺序（main.ts）：element-plus/dist/index.css → theme-chalk/dark/css-vars.css
+ *                      → tokens.css → global.css → animations.css
+ * 依赖前提：documentElement 上有 `dark` 类（main.ts 显式添加）。
+ */
+
+/* ==========================================================================
+   1. 重置与基线
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--coc-bg);
+  color: var(--coc-text);
+  font-family: var(--coc-font-sans);
+  font-size: var(--coc-fs-base);
+  line-height: var(--coc-lh);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--coc-text-strong);
+  line-height: 1.35;
+}
+
+h1 {
+  font-size: var(--coc-fs-xl);
+}
+
+h2 {
+  font-size: var(--coc-fs-lg);
+}
+
+h3 {
+  font-size: var(--coc-fs-md);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--coc-accent);
+  text-decoration: none;
+  transition: color var(--coc-dur-fast) var(--coc-ease);
+}
+
+a:hover {
+  color: var(--coc-primary);
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--coc-font-mono);
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: var(--coc-text-strong);
+}
+
+/* ==========================================================================
+   2. 滚动条（全局细样式，替代各组件里的重复覆写）
+   ========================================================================== */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--coc-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--coc-border);
+  border-radius: var(--coc-radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--coc-border-strong);
+  background-clip: content-box;
+}
+
+/* ==========================================================================
+   3. Element Plus 暗色变量映射
+   —— EP 官方暗色变量挂在 html.dark；这里把业务语义重映射到项目令牌。
+      只需变量映射，组件内部即自动跟随，避免逐组件 :deep() 覆写堆叠。
+   ========================================================================== */
+
+html.dark {
+  /* 主色与语义色 */
+  --el-color-primary: var(--coc-primary);
+  --el-color-primary-light-3: #38bdf8;
+  --el-color-primary-light-5: #0ea5e9;
+  --el-color-primary-light-7: rgba(14, 165, 233, 0.4);
+  --el-color-primary-light-8: rgba(14, 165, 233, 0.24);
+  --el-color-primary-light-9: rgba(14, 165, 233, 0.14);
+  --el-color-primary-dark-2: var(--coc-primary-deep);
+  --el-color-success: var(--coc-success);
+  --el-color-success-light-3: rgba(16, 185, 129, 0.6);
+  --el-color-success-light-5: rgba(16, 185, 129, 0.4);
+  --el-color-success-light-7: rgba(16, 185, 129, 0.26);
+  --el-color-success-light-8: rgba(16, 185, 129, 0.18);
+  --el-color-success-light-9: var(--coc-success-soft);
+  --el-color-warning: var(--coc-warning);
+  --el-color-warning-light-3: rgba(245, 158, 11, 0.6);
+  --el-color-warning-light-5: rgba(245, 158, 11, 0.4);
+  --el-color-warning-light-7: rgba(245, 158, 11, 0.26);
+  --el-color-warning-light-8: rgba(245, 158, 11, 0.18);
+  --el-color-warning-light-9: var(--coc-warning-soft);
+  --el-color-danger: var(--coc-danger);
+  --el-color-danger-light-9: var(--coc-danger-soft);
+  --el-color-error: var(--coc-danger);
+  --el-color-error-light-9: var(--coc-danger-soft);
+  --el-color-info: var(--coc-info);
+  --el-color-info-light-9: rgba(100, 116, 139, 0.16);
+
+  /* 背景与填充 */
+  --el-bg-color: var(--coc-card);
+  --el-bg-color-page: var(--coc-bg);
+  --el-bg-color-overlay: var(--coc-card-2);
+  --el-fill-color: rgba(36, 52, 79, 0.72);
+  --el-fill-color-light: rgba(30, 43, 66, 0.6);
+  --el-fill-color-lighter: rgba(30, 43, 66, 0.42);
+  --el-fill-color-extra-light: rgba(30, 43, 66, 0.28);
+  --el-fill-color-dark: var(--coc-card-3);
+  --el-fill-color-darker: var(--coc-border);
+  /* EP 暗色默认 #141414；映射到卡片色，避免未显式覆写的组件出现意外的透明底 */
+  --el-fill-color-blank: var(--coc-card);
+  --el-mask-color: var(--coc-overlay);
+  --el-mask-color-extra-light: rgba(4, 8, 16, 0.4);
+  --el-overlay-color: rgba(4, 8, 16, 0.8);
+  --el-overlay-color-light: rgba(4, 8, 16, 0.7);
+  --el-overlay-color-lighter: var(--coc-overlay);
+  --el-disabled-bg-color: rgba(30, 43, 66, 0.5);
+  --el-disabled-text-color: #4b5a72;
+  --el-disabled-border-color: var(--coc-border-soft);
+
+  /* 文本 */
+  --el-text-color-primary: var(--coc-text);
+  --el-text-color-regular: var(--coc-text);
+  --el-text-color-secondary: var(--coc-text-muted);
+  --el-text-color-placeholder: var(--coc-text-dim);
+  --el-text-color-disabled: #4b5a72;
+
+  /* 描边 */
+  --el-border-color: var(--coc-border);
+  --el-border-color-light: var(--coc-border);
+  --el-border-color-lighter: var(--coc-border-soft);
+  --el-border-color-extra-light: var(--coc-border-soft);
+  --el-border-color-dark: var(--coc-border-strong);
+  --el-border-color-darker: var(--coc-border-strong);
+  --el-border-color-hover: var(--coc-accent);
+  --el-border: 1px solid var(--el-border-color);
+
+  /* 圆角 / 阴影 / 字体 */
+  --el-border-radius-base: var(--coc-radius);
+  --el-border-radius-small: var(--coc-radius-sm);
+  --el-border-radius-round: var(--coc-radius-full);
+  --el-box-shadow: var(--coc-shadow);
+  --el-box-shadow-light: var(--coc-shadow-sm);
+  --el-box-shadow-lighter: var(--coc-shadow-sm);
+  --el-box-shadow-dark: var(--coc-shadow-lg);
+  --el-font-family: var(--coc-font-sans);
+  --el-font-size-base: var(--coc-fs-base);
+  --el-font-size-small: var(--coc-fs-sm);
+  --el-font-size-extra-small: var(--coc-fs-xs);
+
+  /* 组件级：输入框 / 下拉 / 弹窗 */
+  --el-input-bg-color: rgba(30, 43, 66, 0.6);
+  --el-input-border-color: var(--coc-border);
+  --el-input-hover-border-color: var(--coc-border-strong);
+  --el-input-focus-border-color: var(--coc-accent);
+  --el-input-text-color: var(--coc-text);
+  --el-input-placeholder-color: var(--coc-text-dim);
+  --el-dialog-bg-color: var(--coc-card);
+  --el-dialog-border-radius: var(--coc-radius-lg);
+  --el-popover-bg-color: var(--coc-card-2);
+  --el-popper-border-radius: var(--coc-radius);
+  --el-card-bg-color: var(--coc-card);
+  --el-collapse-header-bg-color: transparent;
+  --el-collapse-content-bg-color: transparent;
+  --el-collapse-border-color: var(--coc-border-soft);
+  --el-collapse-header-text-color: var(--coc-text);
+}
+
+/* ==========================================================================
+   4. Element Plus 组件微调（仅做变量映射覆盖不到的观感修正）
+   ========================================================================== */
+
+/* 顶栏/卡片外的浮层统一发光描边 */
+.el-popper.is-light,
+.el-popper.is-dark {
+  border: 1px solid var(--coc-border) !important;
+  box-shadow: var(--coc-shadow) !important;
+}
+
+.el-popper.is-dark {
+  background: var(--coc-card-2) !important;
+  color: var(--coc-text) !important;
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--coc-accent) !important;
+  font-weight: 600;
+}
+
+.el-select-dropdown__item.is-hovering {
+  background: var(--coc-card-3) !important;
+}
+
+/* 弹窗：暗色卡片 + 发光描边 */
+.el-dialog {
+  border: 1px solid var(--coc-border);
+  background-image: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent 120px);
+}
+
+.el-dialog__title {
+  font-size: var(--coc-fs-md);
+  font-weight: 600;
+  color: var(--coc-text-strong);
+}
+
+.el-dialog__header,
+.el-drawer__header {
+  margin: 0;
+  padding-bottom: var(--coc-sp-3);
+  border-bottom: 1px solid var(--coc-border-soft);
+  color: var(--coc-text);
+}
+
+.el-drawer {
+  background: var(--coc-bg-elev);
+  border-left: 1px solid var(--coc-border);
+}
+
+/* 输入类：暗色凹槽感 */
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  background-color: var(--el-input-bg-color);
+  box-shadow: 0 0 0 1px var(--coc-border) inset;
+  transition: box-shadow var(--coc-dur-fast) var(--coc-ease);
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover,
+.el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--coc-border-strong) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--coc-accent) inset, var(--coc-glow);
+}
+
+/* Tabs：底部细线 + 青色激活项 */
+.el-tabs__header {
+  margin-bottom: var(--coc-sp-3);
+}
+
+.el-tabs__nav-wrap::after {
+  height: 1px;
+  background-color: var(--coc-border-soft);
+}
+
+.el-tabs__item {
+  color: var(--coc-text-muted);
+  transition: color var(--coc-dur-fast) var(--coc-ease);
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: var(--coc-accent);
+}
+
+.el-tabs__active-bar {
+  height: 2px;
+  background-color: var(--coc-accent);
+  box-shadow: 0 0 10px var(--coc-border-glow);
+}
+
+/* 折叠面板（KP 台右栏分组）：无边框容器 + 发光标题行 */
+.el-collapse,
+.el-collapse-item__header,
+.el-collapse-item__wrap {
+  border: none;
+  background: transparent;
+}
+
+.el-collapse-item__header {
+  height: auto;
+  padding: var(--coc-sp-3) var(--coc-sp-4);
+  font-size: var(--coc-fs-base);
+  font-weight: 600;
+  color: var(--coc-text);
+  line-height: 1.4;
+}
+
+.el-collapse-item__header:hover {
+  color: var(--coc-accent);
+}
+
+.el-collapse-item__content {
+  padding: 0 var(--coc-sp-4) var(--coc-sp-4);
+  color: var(--coc-text);
+}
+
+/* 进度条：暗色槽 + 轻微内发光 */
+.el-progress-bar__outer {
+  background-color: rgba(11, 18, 32, 0.85);
+}
+
+.el-progress-bar__inner {
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
+}
+
+/* 标签：暗色底、去掉过亮白底 */
+.el-tag {
+  border-radius: var(--coc-radius-sm);
+  font-weight: 500;
+}
+
+/* 空态文案 */
+.el-empty__description p {
+  color: var(--coc-text-muted);
+}
+
+/* 消息提示（axios 拦截器统一弹的那类） */
+.el-message {
+  border: 1px solid var(--coc-border);
+  background: var(--coc-card-2);
+  box-shadow: var(--coc-shadow);
+}
+
+.el-message-box {
+  border: 1px solid var(--coc-border);
+  background: var(--coc-card);
+}
+
+.el-message-box__title {
+  color: var(--coc-text-strong);
+}
+
+.el-message-box__content {
+  color: var(--coc-text);
+}
+
+/* 加载遮罩与骨架 */
+.el-loading-mask {
+  background-color: rgba(7, 13, 24, 0.7);
+}
+
+.el-skeleton__item {
+  background: linear-gradient(90deg, var(--coc-card-2) 25%, var(--coc-card-3) 37%, var(--coc-card-2) 63%);
+}
+
+/* 分段控件（主持模式开关） */
+.el-radio-group .el-radio-button__inner {
+  background: transparent;
+  border-color: var(--coc-border);
+  color: var(--coc-text-muted);
+}
+
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: var(--coc-primary-soft);
+  border-color: var(--coc-border-glow);
+  color: var(--coc-accent);
+  box-shadow: none;
+}
+
+/* ==========================================================================
+   5. 通用工具类（新组件优先用这些，避免重复造轮子）
+   ========================================================================== */
+
+/** 通用面板：暗色卡片 + 细描边 + 可选发光悬停（§6.2⑦ 面板悬停发光） */
+.coc-panel {
+  background: var(--coc-card);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-lg);
+  box-shadow: var(--coc-shadow-sm);
+}
+
+.coc-panel--flat {
+  box-shadow: none;
+}
+
+/** 面板内衬标题行 */
+.coc-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--coc-sp-2);
+  padding: var(--coc-sp-3) var(--coc-sp-4);
+  border-bottom: 1px solid var(--coc-border-soft);
+}
+
+.coc-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--coc-sp-2);
+  margin: 0;
+  font-size: var(--coc-fs-base);
+  font-weight: 600;
+  color: var(--coc-text-strong);
+}
+
+.coc-panel-title .coc-icon {
+  color: var(--coc-accent);
+}
+
+.coc-panel-body {
+  padding: var(--coc-sp-4);
+}
+
+.coc-hint {
+  margin: 0;
+  font-size: var(--coc-fs-sm);
+  line-height: 1.6;
+  color: var(--coc-text-muted);
+}
+
+/** 小徽章 / 状态片 */
+.coc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--coc-radius-full);
+  border: 1px solid var(--coc-border);
+  background: var(--coc-card-2);
+  color: var(--coc-text-muted);
+  font-size: var(--coc-fs-xs);
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.coc-chip--accent {
+  border-color: var(--coc-border-glow);
+  background: var(--coc-primary-soft);
+  color: var(--coc-accent);
+}
+
+.coc-chip--brand {
+  border-color: rgba(230, 162, 60, 0.5);
+  background: var(--coc-brand-soft);
+  color: var(--coc-brand);
+}
+
+.coc-chip--danger {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: var(--coc-danger-soft);
+  color: var(--coc-danger);
+}
+
+.coc-chip--keeper {
+  border-color: rgba(122, 92, 214, 0.5);
+  background: var(--coc-keeper-soft);
+  color: #b9a4f5;
+}
+
+/** 在线状态点 */
+.coc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--coc-radius-full);
+  background: var(--coc-text-dim);
+  flex-shrink: 0;
+}
+
+.coc-dot--online {
+  background: var(--coc-success);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+}
+
+/** 描边发光悬停（§6.2⑦：卡片 hover 发光描边） */
+.coc-glow-hover {
+  transition: border-color var(--coc-dur) var(--coc-ease), box-shadow var(--coc-dur) var(--coc-ease),
+    transform var(--coc-dur) var(--coc-ease);
+}
+
+.coc-glow-hover:hover {
+  border-color: var(--coc-border-glow);
+  box-shadow: var(--coc-glow);
+  transform: translateY(-2px);
+}
+
+/** 自定义滚动区（细滚动条 + 惯性） */
+.coc-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/** 页面容器：三主界面共用内边距基线 */
+.coc-page {
+  padding: var(--coc-sp-4);
+}
+
+/** 文本层级 */
+.coc-text-strong {
+  color: var(--coc-text-strong);
+}
+
+.coc-text-muted {
+  color: var(--coc-text-muted);
+}
+
+.coc-text-dim {
+  color: var(--coc-text-dim);
+}
+
+.coc-mono {
+  font-family: var(--coc-font-mono);
+  letter-spacing: 0.5px;
+}

@@ -196,6 +196,13 @@ export interface ModuleChangedPayload {
 /** Agent 模式：manual 纯人工 / collab 协同建议 / auto 全自动主持（4.2） */
 export type AgentMode = 'manual' | 'collab' | 'auto'
 
+/** 模式 → 展示名（阶段 6.2：顶栏模式开关与侧栏房间信息卡共用，避免两处文案漂移） */
+export const AGENT_MODE_LABELS: Record<AgentMode, string> = {
+  manual: '人工主持',
+  collab: '协同建议',
+  auto: '全自动主持',
+}
+
 /** 建议附带的检定提示（difficulty 与后端 rules/coc7.py 的 Difficulty 一一对应） */
 export interface SuggestionCheckHint {
   skill: string

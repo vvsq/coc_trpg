@@ -304,7 +304,14 @@ const occupationUsed = computed(() =>
   rows.value.reduce((s, r) => s + r.occupation_points, 0))
 const interestUsed = computed(() =>
   rows.value.reduce((s, r) => s + r.interest_points, 0))
-const occRemain = computed(() => store.budget.occupation_points - occupationUsed.value)
+/**
+ * 信用评级全额占用职业点（规则书第三章 3.3："信用评级初始为 0……在信用评级上
+ * 任意投入技能点"；与服务端 validate_allocation(credit=) 同口径）。
+ */
+const creditCost = computed(() => store.draft.credit)
+const occRemain = computed(
+  () => store.budget.occupation_points - occupationUsed.value - creditCost.value,
+)
 const intRemain = computed(() => store.budget.interest_points - interestUsed.value)
 
 /**
@@ -377,6 +384,14 @@ async function nextStep() {
     }
     if (attrMode.value === 'buy' && buyRemain.value > 0) {
       ElMessage.warning(`还有 ${buyRemain.value} 点未分配`)
+      return
+    }
+    // 信用评级全额占用职业点：预算都装不下信用评级时，先回第 1 步调低信用或提高 EDU
+    if (creditCost.value > store.budget.occupation_points) {
+      ElMessage.warning(
+        `信用评级占用 ${creditCost.value} 点，超出职业点预算 ${store.budget.occupation_points} 点，`
+        + '请调低信用评级或提高教育（EDU）',
+      )
       return
     }
     attrLocked.value = true
@@ -521,7 +536,7 @@ onMounted(async () => {
               </el-radio-group>
             </div>
 
-            <!-- 信用评级：范围由职业决定 -->
+            <!-- 信用评级：范围由职业决定；最终值全额占用职业点（规则书 3.3） -->
             <div class="choice-line">
               <span>信用评级（{{ occ.credit_min }} ~ {{ occ.credit_max }}）：</span>
               <el-input-number
@@ -530,7 +545,12 @@ onMounted(async () => {
                 :max="occ.credit_max"
                 controls-position="right"
               />
+              <span class="credit-cost">占用职业点 {{ creditCost }}</span>
             </div>
+            <p class="credit-note">
+              按规则书：信用评级初始为 0，此处数值将<strong>全额占用职业点</strong>
+              （不能用兴趣点提升），第 3 步的「职业点剩余」已扣除这部分。
+            </p>
           </div>
         </div>
 
@@ -587,6 +607,7 @@ onMounted(async () => {
         <div v-show="activeStep === 2">
           <div class="budget-info">
             <el-tag type="success">职业点剩余：{{ occRemain }} / {{ store.budget.occupation_points }}</el-tag>
+            <el-tag type="info">信用评级占用 {{ creditCost }}</el-tag>
             <el-tag type="warning">兴趣点剩余：{{ intRemain }} / {{ store.budget.interest_points }}</el-tag>
             <el-tag v-if="occ && occ.free_picks > 0" :type="freeMarkedCount === occ.free_picks ? 'success' : 'info'">
               任意特长：已标记 {{ freeMarkedCount }} / {{ occ.free_picks }}
@@ -732,22 +753,49 @@ onMounted(async () => {
 .card-create { max-width: 960px; margin: 20px auto; }
 .step-card { padding: 8px; }
 .step-content { min-height: 420px; margin: 20px 0; }
-.occupation-info { margin-top: 12px; padding: 16px; background: #f5f7fa; border-radius: 6px; }
-.intro { color: #606266; font-size: 13px; line-height: 1.7; }
+.occupation-info {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--coc-card-2);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius);
+}
+.intro { color: var(--coc-text-muted); font-size: 13px; line-height: 1.7; }
 .choice-line { margin-top: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.credit-cost {
+  padding: 1px 8px;
+  border: 1px solid var(--coc-border-glow);
+  border-radius: var(--coc-radius-sm);
+  background: var(--coc-primary-soft);
+  color: var(--coc-accent);
+  font-size: var(--coc-fs-xs);
+  white-space: nowrap;
+}
+.credit-note {
+  margin: 6px 0 0;
+  font-size: var(--coc-fs-xs);
+  line-height: 1.7;
+  color: var(--coc-text-muted);
+}
+.credit-note strong { color: var(--coc-text); }
 .attribute-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 24px; }
 .mode-select h4 { margin: 0 0 8px; }
-.mode-desc { color: #606266; font-size: 13px; line-height: 1.8; margin: 0 0 14px; }
+.mode-desc { color: var(--coc-text-muted); font-size: 13px; line-height: 1.8; margin: 0 0 14px; }
 .lock-tip { margin-bottom: 12px; }
 .budget-info { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .skill-section { margin-top: 18px; }
-.group-box { padding: 12px; border: 1px solid #ebeef5; border-radius: 6px; margin-bottom: 12px; }
+.group-box {
+  padding: 12px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius);
+  margin-bottom: 12px;
+}
 .group-title { margin: 0 0 8px; font-weight: 500; }
 .detail-pick { margin-top: 4px; }
 .tag { margin-left: 6px; }
-.muted { color: #c0c4cc; }
+.muted { color: var(--coc-text-dim); }
 /* 超过单技能创建上限：红字加粗（后端同口径会 400 拒绝） */
-.over-cap { color: #f56c6c; font-weight: 600; }
+.over-cap { color: var(--coc-danger); font-weight: 600; }
 .step-actions { display: flex; align-items: center; margin-top: 16px; }
 .flex-spacer { flex: 1; }
 </style>

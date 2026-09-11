@@ -3,7 +3,7 @@
  * AI 主持面板（4.1 协同建议 → 4.2 三档模式）— 决策 D10：LLM 无写权（collab）/工具写权（auto）。
  *
  * 数据流（沿用项目"只上报意图，结果由广播驱动"原则，D5）：
- *   - 模式切换：PUT agent-mode（manual/collab/auto）→ agent_mode_changed 广播回显
+ *   - 模式切换：已上提到顶栏 ModeSwitch（阶段 6.2②），本面板只读展示当前模式
  *   - collab 生成触发：POST suggestions/generate（202 即回）→ 结果走 WS suggestions 信封；
  *     玩家剧情行动的自动触发由后端完成，store 在 chat_new 到达时置"生成中"
  *   - auto：剧情推进由后端 AutoKeeper 整轮主持，四段叙事经 chat_new 双通道到达
@@ -11,22 +11,14 @@
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { generateSuggestions, setAgentMode } from '@/api/agent'
-import { getRoom } from '@/api/rooms'
+import { generateSuggestions } from '@/api/agent'
 import { useRoomStore } from '@/stores/room'
-import type { AgentMode, SuggestionItem } from '@/types/ws'
+import { AGENT_MODE_LABELS, type SuggestionItem } from '@/types/ws'
 
 const room = useRoomStore()
 
-const switching = ref(false)
 const generating = ref(false)
 const focus = ref('')
-
-const MODE_OPTIONS: { value: AgentMode; label: string }[] = [
-  { value: 'manual', label: '纯人工' },
-  { value: 'collab', label: '协同建议' },
-  { value: 'auto', label: '全自动' },
-]
 
 // 编辑态：一次只编辑一条；编辑文本独立暂存，取消即丢弃
 const editingIdx = ref<number | null>(null)
@@ -71,35 +63,6 @@ watch(
 )
 
 onUnmounted(stopThinkTimer)
-
-/** 面板挂载时拉一次房间详情回显 agent_mode。room.roomId 由 KP 控制台守卫
- * 异步写入（子组件先挂载），照 SkillCheckPanel 的 cardId 先例用 watch 等待 */
-watch(
-  () => room.roomId,
-  async (rid) => {
-    if (!rid) return
-    try {
-      const detail = await getRoom(rid)
-      room.agentMode = detail.agent_mode
-    } catch {
-      // 拦截器已提示；面板仍可用，等 agent_mode_changed 广播回填
-    }
-  },
-  { immediate: true },
-)
-
-async function switchMode(mode: AgentMode): Promise<void> {
-  if (mode === room.agentMode || switching.value) return
-  switching.value = true
-  try {
-    await setAgentMode(room.roomId, { kp_name: room.playerName, mode })
-    // 回显由 agent_mode_changed 广播驱动；未广播前 UI 保持原值
-  } catch {
-    // 拦截器已提示
-  } finally {
-    switching.value = false
-  }
-}
 
 /** 生成 / 重新生成：只触发，结果由 suggestions 信封送达 */
 async function regenerate(): Promise<void> {
@@ -158,18 +121,10 @@ function sendEdit(): void {
 
 <template>
   <div class="ai-panel">
+    <!-- 阶段 6.2②：模式切换已上提到顶栏（ModeSwitch），这里只读展示，避免两处开关打架 -->
     <div class="mode-row">
       <span class="mode-label">主持模式</span>
-      <el-radio-group
-        :model-value="room.agentMode"
-        size="small"
-        :disabled="switching"
-        @change="switchMode"
-      >
-        <el-radio-button v-for="opt in MODE_OPTIONS" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </el-radio-button>
-      </el-radio-group>
+      <span class="coc-chip coc-chip--accent">{{ AGENT_MODE_LABELS[room.agentMode] }}</span>
     </div>
 
     <!-- 全自动（4.2）：AI KP 整轮主持，面板只显示状态与说明 -->

@@ -129,7 +129,7 @@ async function submit(): Promise<void> {
 .drop-sub {
   margin: 6px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .picked {
@@ -140,6 +140,6 @@ async function submit(): Promise<void> {
 }
 
 .picked--empty {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 </style>

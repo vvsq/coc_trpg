@@ -327,7 +327,7 @@ function removeWeapon(index: number): void {
 .header .sub {
   font-size: 14px;
   font-weight: normal;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 .section {
   margin-top: 24px;
@@ -335,7 +335,7 @@ function removeWeapon(index: number): void {
 .section h3 {
   margin: 0 0 10px;
   font-size: 15px;
-  color: #303133;
+  color: var(--coc-text-strong);
 }
 .pre-wrap {
   white-space: pre-wrap;
@@ -343,10 +343,10 @@ function removeWeapon(index: number): void {
 }
 .possessions {
   padding: 10px 14px;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  background: #fafafa;
-  color: #303133;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-sm);
+  background: var(--coc-card-2);
+  color: var(--coc-text);
   font-size: 14px;
   line-height: 1.7;
 }

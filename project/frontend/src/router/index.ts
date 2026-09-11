@@ -39,6 +39,12 @@ const router = createRouter({
       component: () => import('../views/KPConsoleView.vue'),
     },
     {
+      // 阶段 6.2④：系统设置（外观/音效/AI 配置）——原项目没有这个模块
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue'),
+    },
+    {
       // 放最后：静态段 /cards/new 优先级更高，避免 :id 抢占；顺序上仍建议静态在前
       path: '/cards/:id',
       name: 'card-detail',
@@ -67,8 +73,11 @@ const router = createRouter({
 // 若按普通页面处理，一进模组库就弹"离开房间"并在返回时丢掉连接与花名册。
 // 现在进入模组库不拦确认、不拆连接，返回控制台时同房间同身份复用原 socket
 // （ws.connect 有同房同身份的复用守卫）；真正回大厅时才由模组视图的 onUnmounted 收尾。
+//
+// 阶段 6.2②：系统设置同理并入工作区——跑团中途调外观/音效/模型不该被打断，
+// 也不该拆掉 WS（见 SettingsView 的 useRoomReturn 收尾）。
 export const ROOM_SCOPE_ROUTE_NAMES = new Set([
-  'room', 'kp-console', 'module-list', 'module-detail',
+  'room', 'kp-console', 'module-list', 'module-detail', 'settings',
 ])
 
 router.beforeEach(async (to, from) => {

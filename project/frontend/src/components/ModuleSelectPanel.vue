@@ -125,7 +125,7 @@ async function apply(): Promise<void> {
 .cur {
   margin: 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .cur-on {
@@ -133,7 +133,7 @@ async function apply(): Promise<void> {
 }
 
 .cur-off {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .acts {
@@ -146,6 +146,6 @@ async function apply(): Promise<void> {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 </style>

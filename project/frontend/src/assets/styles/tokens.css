@@ -1,0 +1,124 @@
+/**
+ * 设计令牌（Design Tokens）— 阶段 6.2 第 ① 项。
+ *
+ * 铁律：本文件是**全站唯一色值来源**。组件 `<style scoped>` 里只允许引用
+ * `var(--coc-*)`，禁止再写裸 hex / rgba 魔法色值（改主题只改这一处）。
+ *
+ * 视觉基线：ui-example/前端样例demo.html 的 `:root` 令牌 + ui-example/前端样例.png。
+ * 色板语义：深蓝黑底（bg/card 三级）+ 青蓝霓虹强调（primary/accent）+ 克苏鲁橙（brand）。
+ *
+ * 两个可调项由「系统设置」页写入 documentElement：
+ *   --coc-font-scale     字体档（0.9 / 1 / 1.15）
+ *   --coc-glow-strength  面板发光强度（0 / 1 / 2）
+ */
+:root {
+  /* ---------- 背景层级（由深到浅） ---------- */
+  --coc-bg-deep: #070d18;
+  --coc-bg: #0b1220;
+  --coc-bg-elev: #162032;
+  --coc-card: #162032;
+  --coc-card-2: #1e2b42;
+  --coc-card-3: #24344f;
+  --coc-overlay: rgba(4, 8, 16, 0.74);
+  --coc-scrim: rgba(7, 13, 24, 0.82);
+
+  /* ---------- 描边 ---------- */
+  --coc-border: #2a3a55;
+  --coc-border-soft: rgba(42, 58, 85, 0.6);
+  --coc-border-strong: #3b5177;
+  --coc-border-glow: rgba(34, 211, 238, 0.45);
+
+  /* ---------- 主色 / 品牌色 ---------- */
+  --coc-primary: #0ea5e9;
+  --coc-primary-deep: #0284c7;
+  --coc-primary-soft: rgba(14, 165, 233, 0.16);
+  --coc-accent: #22d3ee;
+  --coc-brand: #e6a23c;
+  --coc-brand-soft: rgba(230, 162, 60, 0.16);
+
+  /* ---------- 语义色 ---------- */
+  --coc-success: #10b981;
+  --coc-success-soft: rgba(16, 185, 129, 0.16);
+  --coc-warning: #f59e0b;
+  --coc-warning-soft: rgba(245, 158, 11, 0.14);
+  --coc-danger: #ef4444;
+  --coc-danger-soft: rgba(239, 68, 68, 0.16);
+  --coc-info: #64748b;
+  /* 仅 KP 专享（暗骰 / keeper 笔记），与 types/ws.ts 语义一致 */
+  --coc-keeper: #7a5cd6;
+  --coc-keeper-soft: rgba(122, 92, 214, 0.16);
+
+  /* ---------- 文本 ---------- */
+  --coc-text-strong: #ffffff;
+  --coc-text: #e2e8f0;
+  --coc-text-muted: #94a3b8;
+  --coc-text-dim: #64748b;
+  --coc-text-inverse: #0b1220;
+
+  /* ---------- 骰子等级色（对应 types/ws.ts ROLL_BADGE_STYLES 的语义，
+       只做"暗色化"重映射，不改协议层配色表本身） ---------- */
+  --coc-roll-critical: #d4a017;
+  --coc-roll-extreme: #409eff;
+  --coc-roll-hard: #67c23a;
+  --coc-roll-regular: #94a3b8;
+  --coc-roll-fail: #64748b;
+  --coc-roll-fumble: #f56c6c;
+
+  /* ---------- 间距 ---------- */
+  --coc-sp-1: 4px;
+  --coc-sp-2: 8px;
+  --coc-sp-3: 12px;
+  --coc-sp-4: 16px;
+  --coc-sp-5: 20px;
+  --coc-sp-6: 24px;
+  --coc-sp-8: 32px;
+  --coc-sp-10: 40px;
+
+  /* ---------- 字体与字号（受 --coc-font-scale 缩放） ---------- */
+  --coc-font-scale: 1;
+  --coc-font-sans: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --coc-font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  --coc-fs-xs: calc(11px * var(--coc-font-scale));
+  --coc-fs-sm: calc(12px * var(--coc-font-scale));
+  --coc-fs-base: calc(14px * var(--coc-font-scale));
+  --coc-fs-md: calc(15px * var(--coc-font-scale));
+  --coc-fs-lg: calc(18px * var(--coc-font-scale));
+  --coc-fs-xl: calc(22px * var(--coc-font-scale));
+  --coc-fs-2xl: calc(28px * var(--coc-font-scale));
+  --coc-lh: 1.7;
+
+  /* ---------- 圆角 ---------- */
+  --coc-radius-sm: 6px;
+  --coc-radius: 10px;
+  --coc-radius-lg: 14px;
+  --coc-radius-full: 999px;
+
+  /* ---------- 阴影与发光（强度受 --coc-glow-strength 控制） ---------- */
+  --coc-glow-strength: 1;
+  --coc-shadow-sm: 0 2px 8px rgba(2, 6, 14, 0.45);
+  --coc-shadow: 0 8px 24px rgba(2, 6, 14, 0.55);
+  --coc-shadow-lg: 0 18px 48px rgba(2, 6, 14, 0.68);
+  --coc-glow: 0 0 calc(18px * var(--coc-glow-strength)) rgba(34, 211, 238, 0.18);
+  --coc-glow-strong: 0 0 calc(28px * var(--coc-glow-strength)) rgba(34, 211, 238, 0.32);
+  --coc-glow-brand: 0 0 calc(20px * var(--coc-glow-strength)) rgba(230, 162, 60, 0.26);
+
+  /* ---------- 动效 ---------- */
+  --coc-dur-fast: 0.18s;
+  --coc-dur: 0.28s;
+  --coc-dur-slow: 0.45s;
+  --coc-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* ---------- 层级 ---------- */
+  --coc-z-bg: 0;
+  --coc-z-content: 1;
+  --coc-z-topbar: 100;
+  --coc-z-drawer: 200;
+
+  /* ---------- 布局尺寸 ---------- */
+  --coc-topbar-h: 62px;
+  --coc-sidenav-w: 216px;
+  --coc-rightpanel-w: 320px;
+  --coc-bottomnav-h: 58px;
+  --coc-touch-min: 44px;
+}

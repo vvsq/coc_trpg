@@ -253,6 +253,6 @@ watch(
 .check-hint {
   margin: 6px 0 0;
   font-size: 11px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 </style>

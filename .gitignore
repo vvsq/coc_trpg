@@ -40,3 +40,4 @@ gui-test-screenshots/
 !.vscode/extensions.json
 Thumbs.db
 .DS_Store
+ui-example/

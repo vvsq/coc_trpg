@@ -10,6 +10,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteModule, listModules } from '@/api/modules'
 import ModuleUploadDialog from '@/components/ModuleUploadDialog.vue'
+import CocIcon from '@/components/common/CocIcon.vue'
+import StateView from '@/components/common/StateView.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { useRoomReturn } from '@/composables/useRoomReturn'
 import {
   PARSE_STATUS_LABEL,
@@ -24,12 +27,17 @@ const router = useRouter()
 const { returnLabel, goBack, carryQuery } = useRoomReturn()
 const modules = ref<ModuleMeta[]>([])
 const loading = ref(true)
+const error = ref('')
 const uploadVisible = ref(false)
 
 async function refresh(): Promise<void> {
   loading.value = true
+  error.value = ''
   try {
     modules.value = await listModules()
+  } catch {
+    // 拦截器已提示一次，页面上给可重试的错误态（6.2⑨）
+    error.value = '模组列表加载失败，请确认后端服务仍在运行'
   } finally {
     loading.value = false
   }
@@ -67,20 +75,41 @@ async function onDelete(row: ModuleMeta): Promise<void> {
   <main class="module-list">
     <div class="head">
       <div>
-        <h2>模组库</h2>
+        <h2 class="head-title">
+          <CocIcon name="book" :size="20" />
+          模组库
+        </h2>
         <p class="sub">上传剧本 → 解析为结构化骨架 → 在 KP 台挂载</p>
       </div>
       <div class="head-actions">
         <el-button @click="goBack">{{ returnLabel }}</el-button>
-        <el-button type="primary" @click="uploadVisible = true">上传模组</el-button>
+        <el-button type="primary" @click="uploadVisible = true">
+          <CocIcon name="upload" :size="14" />
+          上传模组
+        </el-button>
       </div>
     </div>
 
-    <div v-loading="loading" class="grid">
+    <SkeletonBlock v-if="loading" variant="card" :count="3" :rows="2" class="grid-skeleton" />
+
+    <StateView v-else-if="error" state="error" title="加载失败" :description="error">
+      <el-button size="small" type="primary" plain @click="refresh">重试</el-button>
+    </StateView>
+
+    <StateView
+      v-else-if="modules.length === 0"
+      state="empty"
+      title="还没有模组"
+      description="上传一份 TXT / PDF / DOCX 剧本，解析成结构化骨架后就能挂到房间"
+    >
+      <el-button type="primary" @click="uploadVisible = true">上传模组</el-button>
+    </StateView>
+
+    <div v-else class="grid">
       <div
         v-for="row in modules"
         :key="row.id"
-        class="mod-card"
+        class="mod-card coc-glow-hover"
         @click="openDetail(row.id)"
       >
         <div class="mod-head">
@@ -106,100 +135,104 @@ async function onDelete(row: ModuleMeta): Promise<void> {
       </div>
     </div>
 
-    <el-empty
-      v-if="!loading && modules.length === 0"
-      description="还没有模组，先上传一个剧本吧"
-    >
-      <el-button type="primary" @click="uploadVisible = true">上传模组</el-button>
-    </el-empty>
-
     <ModuleUploadDialog v-model="uploadVisible" @uploaded="onUploaded" />
   </main>
 </template>
 
 <style scoped>
 .module-list {
-  min-height: calc(100vh - 54px);
-  padding: 32px 32px 56px;
-  background:
-    radial-gradient(ellipse at 15% 0%, rgba(44, 62, 80, 0.5), transparent 55%),
-    #1b2431;
-  color: #e8eaed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--coc-sp-3);
+  min-height: 100%;
+  padding: var(--coc-sp-6) var(--coc-sp-5) var(--coc-sp-10);
+  color: var(--coc-text);
 }
 
 .head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  gap: var(--coc-sp-4);
   max-width: 1080px;
-  margin: 0 auto 22px;
+  width: 100%;
+  margin: 0 auto var(--coc-sp-2);
+  padding-bottom: var(--coc-sp-3);
+  border-bottom: 1px solid var(--coc-border);
 }
 
-.head h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 1px;
+.head-title {
+  display: flex;
+  align-items: center;
+  gap: var(--coc-sp-2);
+  color: var(--coc-text-strong);
+}
+
+.head-title .coc-icon-svg {
+  color: var(--coc-accent);
 }
 
 .head-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--coc-sp-2);
 }
 
 .sub {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: #909399;
+  margin-top: 6px;
+  font-size: var(--coc-fs-sm);
+  color: var(--coc-text-muted);
 }
 
-.grid {
+.grid,
+.grid-skeleton {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: var(--coc-sp-4);
   max-width: 1080px;
-  min-height: 120px;
+  width: 100%;
   margin: 0 auto;
 }
 
+.grid-skeleton {
+  display: grid;
+}
+
 @media (max-width: 900px) {
-  .grid {
+  .grid,
+  .grid-skeleton {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 620px) {
-  .grid {
+  .grid,
+  .grid-skeleton {
     grid-template-columns: 1fr;
   }
 }
 
 .mod-card {
-  padding: 16px;
-  border: 1px solid #2c3e50;
-  border-radius: 10px;
-  background: #222d3d;
+  display: flex;
+  flex-direction: column;
+  padding: var(--coc-sp-4);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-lg);
+  background: rgba(22, 32, 50, 0.72);
   cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-
-.mod-card:hover {
-  transform: translateY(-2px);
-  border-color: #e6a23c;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 .mod-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--coc-sp-2);
 }
 
 .mod-name {
-  font-size: 15px;
+  font-size: var(--coc-fs-md);
   font-weight: 600;
+  color: var(--coc-text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -208,40 +241,39 @@ async function onDelete(row: ModuleMeta): Promise<void> {
 .mod-tags {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: var(--coc-sp-2);
+  margin-top: var(--coc-sp-3);
 }
 
 .src-tag {
   padding: 1px 7px;
-  font-size: 11px;
-  color: #e6a23c;
-  border: 1px solid #6b5324;
-  border-radius: 4px;
+  border: 1px solid rgba(230, 162, 60, 0.5);
+  border-radius: var(--coc-radius-sm);
+  background: var(--coc-brand-soft);
+  color: var(--coc-brand);
+  font-size: var(--coc-fs-xs);
 }
 
 .mod-meta {
-  font-size: 12px;
-  color: #909399;
+  font-size: var(--coc-fs-xs);
+  color: var(--coc-text-muted);
 }
 
 .mod-foot {
   display: flex;
   justify-content: space-between;
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: #909399;
+  gap: var(--coc-sp-2);
+  margin: var(--coc-sp-3) 0 0;
+  font-size: var(--coc-fs-xs);
+  color: var(--coc-text-muted);
 }
 
 .mod-actions {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
-  margin-top: 8px;
-}
-
-/* Element Plus 暗色适配：卡片内的浅色表格/折叠面板统一压暗 */
-:deep(.el-empty__description p) {
-  color: #909399;
+  margin-top: var(--coc-sp-2);
+  padding-top: var(--coc-sp-2);
+  border-top: 1px solid var(--coc-border-soft);
 }
 </style>

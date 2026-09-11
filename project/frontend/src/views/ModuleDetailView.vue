@@ -173,7 +173,7 @@ function escapeHtml(raw: string): string {
 }
 
 .back {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .title-area {
@@ -201,7 +201,7 @@ function escapeHtml(raw: string): string {
 
 .src {
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -225,7 +225,7 @@ function escapeHtml(raw: string): string {
 
 .raw-meta {
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .raw {
@@ -248,12 +248,12 @@ function escapeHtml(raw: string): string {
   max-width: 1080px;
   margin: 18px auto 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 /* 暗色主题适配 */
 :deep(.el-tabs__item) {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 :deep(.el-tabs__item.is-active) {

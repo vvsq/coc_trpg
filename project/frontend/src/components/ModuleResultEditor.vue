@@ -332,7 +332,7 @@ function cellText(row: Record<string, unknown>, field: FieldDef): string {
 .count {
   margin-left: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .summary p {
@@ -346,7 +346,7 @@ function cellText(row: Record<string, unknown>, field: FieldDef): string {
   display: inline-block;
   min-width: 62px;
   margin-right: 8px;
-  color: #909399;
+  color: var(--coc-text-muted);
   font-weight: 500;
 }
 
@@ -370,7 +370,7 @@ function cellText(row: Record<string, unknown>, field: FieldDef): string {
 .empty {
   margin: 0;
   font-size: 13px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .cell {

@@ -489,7 +489,7 @@ async function runProbe(): Promise<void> {
 
 .timeout-unit {
   font-size: 11px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .preset-tag {

@@ -132,12 +132,17 @@ def validate_allocation(
     choices: Mapping[int, AttrKey] | None = None,
     *,
     max_skill_value: int | None = None,
+    credit: int = 0,
 ) -> list[str]:
     """校验分配是否合法，返回问题列表（空列表 = 合法）。
 
     max_skill_value：单技能创建上限，见模块常量 SKILL_MAX_AT_CREATION 的说明
     （规则书未载明，取 KP 裁定值）。判定只针对**被点数推过上限**的技能：
     `base` 本身已超过上限的（母语 = EDU，EDU 可到 99）不算违规，否则会误报。
+
+    credit：信用评级最终值，**全额占用职业点**（规则书第三章 3.3："信用评级
+    初始为 0……可以在信用评级上任意投入技能点"；示例为记者分配 41 点本职技能点
+    得到信用评级 41）。默认 0 兼容不传的历史调用（如单技能上限的老测试）。
     """
     problems: list[str] = []
     budget = build_budget(occ, attrs, choices)
@@ -146,11 +151,14 @@ def validate_allocation(
         problems.append('职业点数尚未确定：还有属性未选择')
         return problems
 
-    occ_used = sum(a.occupation_points for a in allocations)
+    occ_used = sum(a.occupation_points for a in allocations) + credit
     int_used = sum(a.interest_points for a in allocations)
 
     if occ_used > budget.occupation_points:
-        problems.append(f'职业点超支：已用 {occ_used} / 上限 {budget.occupation_points}')
+        used_detail = f'职业点超支：已用 {occ_used} / 上限 {budget.occupation_points}'
+        if credit:
+            used_detail += f'（其中信用评级占用 {credit} 点）'
+        problems.append(used_detail)
     if int_used > budget.interest_points:
         problems.append(f'兴趣点超支：已用 {int_used} / 上限 {budget.interest_points}')
 

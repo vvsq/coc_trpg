@@ -32,6 +32,7 @@ import { useQuitRoom } from '@/composables/useQuitRoom'
 import { ROOM_SCOPE_ROUTE_NAMES } from '@/router'
 import ChatStream from '@/components/ChatStream.vue'
 import SkillCheckPanel from '@/components/SkillCheckPanel.vue'
+import StatBar from '@/components/common/StatBar.vue'
 import AiSuggestionPanel from '@/components/AiSuggestionPanel.vue'
 import KpStylePanel from '@/components/KpStylePanel.vue'
 import ModuleSelectPanel from '@/components/ModuleSelectPanel.vue'
@@ -90,15 +91,11 @@ function isLow(cur: number, max: number): boolean {
   return max > 0 && cur / max <= LOW_RATIO
 }
 
-function barColor(cur: number, max: number, base: string): string {
-  return isLow(cur, max) ? '#f56c6c' : base
-}
-
 function memberBars(name: string) {
   const s = memberState(name)
   return [
-    { label: 'HP', cur: s.hp, max: s.hp_max, color: barColor(s.hp, s.hp_max, '#F56C6C') },
-    { label: 'SAN', cur: s.sanity, max: s.sanity_max, color: barColor(s.sanity, s.sanity_max, '#9B59B6') },
+    { label: 'HP', cur: s.hp, max: s.hp_max, tone: 'hp' as const },
+    { label: 'SAN', cur: s.sanity, max: s.sanity_max, tone: 'san' as const },
   ]
 }
 
@@ -109,6 +106,9 @@ function isWarn(name: string): boolean {
 
 // ---------- 整卡抽屉 ----------
 const drawerVisible = ref(false)
+/** 6.2⑥：右栏工具分组折叠——默认只展开「开团与场景」，其余按需展开，避免 20 屏滚动 */
+const toolGroups = ref<string[]>(['start'])
+
 const drawerMember = ref<WsMember | null>(null)
 const drawerCard = ref<Investigator | null>(null)
 const drawerLoading = ref(false)
@@ -494,6 +494,7 @@ onUnmounted(() => {
       <div class="room-title">
         <span class="room-tag">房间</span>
         <span class="room-code">{{ room.roomId }}</span>
+        <span class="coc-chip">{{ room.roomModule?.module_name || '默认剧情骨架' }}</span>
         <el-tooltip
           v-if="room.scene?.scene_title"
           :content="room.scene.scene_desc || room.scene.scene_title"
@@ -538,16 +539,7 @@ onUnmounted(() => {
             </div>
           </div>
           <template v-if="memberState(m.player_name).hasCard">
-            <div v-for="b in memberBars(m.player_name)" :key="b.label" class="stat-row">
-              <span class="stat-label">{{ b.label }}</span>
-              <el-progress
-                class="stat-bar"
-                :percentage="b.max > 0 ? Math.round((b.cur / b.max) * 100) : 0"
-                :stroke-width="8"
-                :color="b.color"
-              />
-              <span class="stat-num">{{ b.cur }}/{{ b.max }}</span>
-            </div>
+            <StatBar v-for="b in memberBars(m.player_name)" :key="b.label" :label="b.label" :value="b.cur" :max="b.max" :tone="b.tone" compact />
           </template>
           <div v-if="isWarn(m.player_name)" class="warn-row">
             <el-tag type="danger" size="small" effect="dark">⚠ HP/SAN ≤30% 预警</el-tag>
@@ -566,6 +558,8 @@ onUnmounted(() => {
 
       <!-- 右栏：KP 工具箱 -->
       <aside class="toolbox">
+        <el-collapse v-model="toolGroups" class="tool-groups">
+        <el-collapse-item name="start" title="开团与场景">
         <!-- 开团（waiting → playing）：开团后大厅不再展示本房间，KP 退出改为保留 -->
         <div class="panel-card">
           <h3 class="panel-title">开团</h3>
@@ -616,6 +610,8 @@ onUnmounted(() => {
           </el-button>
         </div>
 
+        </el-collapse-item>
+        <el-collapse-item name="check" title="检定与投点">
         <!-- 掷骰面板（3.2 手动模式复用；KP 无卡自动走手输，暗骰默认勾选） -->
         <div class="panel-card">
           <h3 class="panel-title">技能检定</h3>
@@ -678,6 +674,8 @@ onUnmounted(() => {
           </el-button>
         </div>
 
+        </el-collapse-item>
+        <el-collapse-item name="suggest" title="AI 建议与风格">
         <!-- AI 建议（4.1 协同建议模式：玩家行动 → LLM 候选建议，仅 KP 可见） -->
         <div class="panel-card">
           <h3 class="panel-title">AI 建议</h3>
@@ -690,6 +688,8 @@ onUnmounted(() => {
           <KpStylePanel />
         </div>
 
+        </el-collapse-item>
+        <el-collapse-item name="module" title="模组与检卡">
         <!-- 模组骨架（5.4：一个房间挂 1 个模组，未挂载回退默认骨架） -->
         <div class="panel-card">
           <h3 class="panel-title">模组骨架</h3>
@@ -702,6 +702,8 @@ onUnmounted(() => {
           <CardReviewPanel />
         </div>
 
+        </el-collapse-item>
+        <el-collapse-item name="misc" title="设置与状态">
         <!-- LLM 设置（4.1+：最小 KP 设置面板，写 .env 全局生效；DB 入库留 4.4） -->
         <div class="panel-card">
           <h3 class="panel-title">LLM 设置</h3>
@@ -779,6 +781,8 @@ onUnmounted(() => {
             <el-button size="small" class="tb-btn" @click="onOpenLoadDialog">读档</el-button>
           </div>
         </div>
+        </el-collapse-item>
+        </el-collapse>
       </aside>
     </div>
 
@@ -834,22 +838,18 @@ onUnmounted(() => {
             {{ drawerCard.gender }} · {{ drawerCard.age }} 岁 · {{ drawerCard.occupation }}
             · {{ eraLabel(drawerCard.era) }}
           </p>
-          <div v-for="b in [
-            { label: 'HP', cur: drawerCard.state.current_hp, max: drawerCard.derived.HP, color: '#F56C6C' },
-            { label: 'MP', cur: drawerCard.state.current_mp, max: drawerCard.derived.MP, color: '#409EFF' },
-            { label: 'SAN', cur: drawerCard.state.current_sanity, max: drawerCard.derived.SAN, color: '#9B59B6' },
-            { label: '幸运', cur: drawerCard.state.current_luck, max: 99, color: '#67C23A' },
-          ]" :key="b.label" class="stat-row">
-            <span class="stat-label">{{ b.label }}</span>
-            <el-progress
-              class="stat-bar"
-              :percentage="b.max > 0 ? Math.round((b.cur / b.max) * 100) : 0"
-              :stroke-width="8"
-              :color="b.color"
-            />
-            <span class="stat-num">{{ b.cur }}/{{ b.max }}</span>
-          </div>
-
+          <StatBar v-for="b in [
+            { label: 'HP', cur: drawerCard.state.current_hp, max: drawerCard.derived.HP, tone: 'hp' as const },
+            { label: 'MP', cur: drawerCard.state.current_mp, max: drawerCard.derived.MP, tone: 'mp' as const },
+            { label: 'SAN', cur: drawerCard.state.current_sanity, max: drawerCard.derived.SAN, tone: 'san' as const },
+            { label: '幸运', cur: drawerCard.state.current_luck, max: 99, tone: 'luk' as const },
+          ]"
+            :key="b.label"
+            :label="b.label"
+            :value="b.cur"
+            :max="b.max"
+            :tone="b.tone"
+          />
           <h4 class="drawer-sec">属性</h4>
           <div class="attr-grid">
             <div v-for="(v, k) in drawerCard.attributes" :key="k" class="attr-item">
@@ -894,18 +894,19 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   /* 减去 App 导航栏高度（含边框），避免整页溢出滚动 */
-  height: calc(100vh - 55px);
-  background: #1b2431;
-  color: #e8eaed;
+  /* 阶段 6.2②：高度由外壳主内容区给出 */
+  height: 100%;
+  color: var(--coc-text);
 }
 
 .room-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 20px;
-  background: #151c26;
-  border-bottom: 1px solid #2c3e50;
+  flex-shrink: 0;
+  padding: var(--coc-sp-3) var(--coc-sp-4);
+  background: rgba(11, 18, 32, 0.72);
+  border-bottom: 1px solid var(--coc-border);
 }
 
 .room-title {
@@ -915,15 +916,17 @@ onUnmounted(() => {
 }
 
 .room-tag {
-  font-size: 13px;
-  color: #909399;
+  font-size: var(--coc-fs-sm);
+  color: var(--coc-text-muted);
+  white-space: nowrap;
 }
 
 .room-code {
-  font-size: 20px;
+  font-family: var(--coc-font-mono);
+  font-size: var(--coc-fs-lg);
   font-weight: 600;
-  letter-spacing: 4px;
-  color: #e6a23c;
+  letter-spacing: 3px;
+  color: var(--coc-brand);
 }
 
 .scene-chip {
@@ -932,11 +935,11 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 2px 10px;
-  border-radius: 10px;
-  background: rgba(230, 162, 60, 0.15);
-  border: 1px solid rgba(230, 162, 60, 0.4);
-  color: #e6a23c;
-  font-size: 13px;
+  border-radius: var(--coc-radius-full);
+  background: var(--coc-brand-soft);
+  border: 1px solid rgba(230, 162, 60, 0.45);
+  color: var(--coc-brand);
+  font-size: var(--coc-fs-sm);
   cursor: default;
 }
 
@@ -951,11 +954,11 @@ onUnmounted(() => {
 }
 
 .quit-btn {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .quit-btn:hover {
-  color: #f56c6c;
+  color: #fca5a5;
 }
 
 .kp-body {
@@ -967,39 +970,40 @@ onUnmounted(() => {
 }
 
 .panel-title {
-  margin: 0 0 12px;
-  font-size: 14px;
+  margin: 0 0 var(--coc-sp-3);
+  font-size: var(--coc-fs-base);
   font-weight: 600;
-  color: #e6a23c;
+  color: var(--coc-text-strong);
 }
 
 /* ---------- 左栏玩家面板 ---------- */
 .player-panel {
   display: flex;
-  width: 300px;
+  width: 292px;
   flex-shrink: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--coc-sp-3);
   overflow-y: auto;
 }
 
 .member-card {
-  padding: 12px 14px;
-  background: #222d3d;
-  border: 1px solid #2c3e50;
-  border-radius: 10px;
+  padding: var(--coc-sp-3) var(--coc-sp-4);
+  background: rgba(22, 32, 50, 0.72);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-lg);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color var(--coc-dur-fast) var(--coc-ease), box-shadow var(--coc-dur-fast) var(--coc-ease);
 }
 
 .member-card:hover {
-  border-color: #e6a23c;
+  border-color: var(--coc-border-glow);
+  box-shadow: var(--coc-glow);
 }
 
 /* ≤30% 红色预警：卡片边框转红 + 预警标签 */
 .member-card--warn,
 .member-card--warn:hover {
-  border-color: #f56c6c;
+  border-color: var(--coc-danger);
 }
 
 .member-head {
@@ -1015,10 +1019,11 @@ onUnmounted(() => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  background: #2c3e50;
-  color: #e8eaed;
-  font-size: 14px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-full);
+  background: var(--coc-card-3);
+  color: var(--coc-text);
+  font-size: var(--coc-fs-base);
   flex-shrink: 0;
 }
 
@@ -1041,7 +1046,7 @@ onUnmounted(() => {
 .member-occ {
   margin: 2px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1057,7 +1062,7 @@ onUnmounted(() => {
 .stat-label {
   width: 30px;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .stat-bar {
@@ -1068,7 +1073,7 @@ onUnmounted(() => {
   width: 48px;
   text-align: right;
   font-size: 12px;
-  color: #e8eaed;
+  color: var(--coc-text);
 }
 
 .warn-row {
@@ -1078,13 +1083,13 @@ onUnmounted(() => {
 .member-hint {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .panel-hint {
   margin: 0;
   font-size: 12px;
-  color: #6b7686;
+  color: var(--coc-text-dim);
   text-align: center;
 }
 
@@ -1098,18 +1103,63 @@ onUnmounted(() => {
 /* ---------- 右栏工具箱 ---------- */
 .toolbox {
   display: flex;
-  width: 330px;
+  width: var(--coc-rightpanel-w);
   flex-shrink: 0;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--coc-sp-4);
   overflow-y: auto;
 }
 
+/* 6.2⑥：右栏工具分组折叠（分组标题走 global.css 的 .el-collapse 样式） */
+.tool-groups {
+  border: none;
+}
+
+/* 阶段 6.2⑩：窄屏改单列（成员列表 → 剧情流 → 工具箱），横向不再挤三栏 */
+@media (max-width: 900px) {
+  .kp-body {
+    flex-direction: column;
+    overflow-y: auto;
+    gap: var(--coc-sp-3);
+    padding: var(--coc-sp-3);
+  }
+
+  .player-panel,
+  .toolbox {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .kp-mid {
+    min-height: 56vh;
+  }
+
+  .room-header {
+    flex-wrap: wrap;
+    gap: var(--coc-sp-2);
+  }
+
+  .room-title,
+  .header-right {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .scene-chip {
+    max-width: 42vw;
+  }
+
+  .quit-btn {
+    min-height: var(--coc-touch-min);
+    padding: 0 var(--coc-sp-3);
+  }
+}
+
 .panel-card {
-  background: #222d3d;
-  border: 1px solid #2c3e50;
-  border-radius: 10px;
-  padding: 14px 16px;
+  background: rgba(22, 32, 50, 0.72);
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius-lg);
+  padding: var(--coc-sp-4);
 }
 
 .tb-row {
@@ -1128,13 +1178,13 @@ onUnmounted(() => {
   margin: -4px 0 10px;
   font-size: 12px;
   line-height: 1.5;
-  color: #8da2c0;
+  color: var(--coc-text-muted);
 }
 
 .delta-label {
   width: 34px;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .delta-input {
@@ -1148,14 +1198,14 @@ onUnmounted(() => {
 .start-hint {
   margin: 0 0 10px;
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
   line-height: 1.6;
 }
 
 .llm-hint {
   margin: 0 0 10px;
   font-size: 12px;
-  color: #7f8fa6;
+  color: var(--coc-text-muted);
   line-height: 1.6;
 }
 
@@ -1178,7 +1228,7 @@ onUnmounted(() => {
   margin: 24px 0;
   text-align: center;
   font-size: 13px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .save-item {
@@ -1187,25 +1237,25 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
+  border: 1px solid var(--coc-border);
+  border-radius: var(--coc-radius);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
 
 .save-item:hover {
-  border-color: #e6a23c;
+  border-color: var(--coc-border-glow);
 }
 
 .save-item--active {
-  border-color: #e6a23c;
-  background: #fdf6ec;
+  border-color: var(--coc-brand);
+  background: var(--coc-brand-soft);
 }
 
 .save-name {
-  font-size: 14px;
+  font-size: var(--coc-fs-base);
   font-weight: 600;
-  color: #303133;
+  color: var(--coc-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1213,14 +1263,14 @@ onUnmounted(() => {
 
 .save-time {
   font-size: 12px;
-  color: #909399;
+  color: var(--coc-text-muted);
   flex-shrink: 0;
 }
 
 /* ---------- 整卡抽屉（浅色文档风） ---------- */
 .drawer-body {
   min-height: 200px;
-  color: #303133;
+  color: var(--coc-text);
 }
 
 .drawer-name {
@@ -1231,14 +1281,14 @@ onUnmounted(() => {
 .drawer-meta {
   margin: 4px 0 16px;
   font-size: 13px;
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .drawer-sec {
   margin: 18px 0 8px;
-  font-size: 14px;
-  color: #e6a23c;
-  border-bottom: 1px solid #ebeef5;
+  font-size: var(--coc-fs-base);
+  color: var(--coc-accent);
+  border-bottom: 1px solid var(--coc-border-soft);
   padding-bottom: 4px;
 }
 
@@ -1252,13 +1302,13 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 6px 10px;
-  background: #f5f7fa;
-  border-radius: 6px;
-  font-size: 13px;
+  background: var(--coc-card-2);
+  border-radius: var(--coc-radius-sm);
+  font-size: var(--coc-fs-sm);
 }
 
 .attr-label {
-  color: #909399;
+  color: var(--coc-text-muted);
 }
 
 .attr-val {
@@ -1274,7 +1324,7 @@ onUnmounted(() => {
 }
 
 .weapon-row span {
-  color: #606266;
+  color: var(--coc-text-muted);
 }
 
 .skill-list {
@@ -1285,21 +1335,22 @@ onUnmounted(() => {
 
 .skill-chip {
   padding: 2px 8px;
-  background: #f0f2f5;
-  border-radius: 10px;
-  font-size: 12px;
-  color: #303133;
+  background: var(--coc-card-2);
+  border: 1px solid var(--coc-border-soft);
+  border-radius: var(--coc-radius-full);
+  font-size: var(--coc-fs-xs);
+  color: var(--coc-text);
 }
 
 .bg-row {
   font-size: 13px;
   line-height: 1.7;
-  color: #606266;
+  color: var(--coc-text-muted);
   margin-bottom: 4px;
   word-break: break-word;
 }
 
 .bg-label {
-  color: #303133;
+  color: var(--coc-text-strong);
 }
 </style>
